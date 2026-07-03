@@ -111,7 +111,7 @@ fn String[] build_linux_link_command(Linker* linker, CompileContext* context) =>
     command.push("-o");
     command.push(linker.output);
 
-    foreach (String mod : context.mods.values(context.alloc)) {
+    foreach (String mod : context.mods.keys(context.alloc)) {
         command.push(string::format(context.alloc, "out/obj/%s.o", mod));
     }
 

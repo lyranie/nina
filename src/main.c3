@@ -3,6 +3,7 @@ module nina;
 import llvm;
 
 import std::io;
+import std::os;
 import std::time;
 import std::thread;
 
@@ -20,12 +21,18 @@ fn void main(String[] argv)
     args::parse(context.args, argv);
 
     foreach (String file : context.args.files) {
-        context.current_file = file;
+        String? path = file.to_tpath().absolute(context.alloc).copy(context.alloc);
+        if (catch err = path) {
+            io::eprintfn("Unable to read file '%s': %s", file, err);
+            os::exit(1);
+        }
+
+        context.current_file = path;
 
         // -- LEXER --
         profiler::commit(context.profiler, "Lexer");
         
-        Lexer* lexer = lexer::create(context.alloc, file);
+        Lexer* lexer = lexer::create(context.alloc, path);
         lexer::tokenize(lexer, context);
 
         // -- PARSER --

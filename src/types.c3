@@ -126,6 +126,10 @@ struct Parser {
 
 struct Node {
     NodeType type;
+    struct range {
+        Range from;
+        Range to;
+    }
 
     union {
         struct mod_node {

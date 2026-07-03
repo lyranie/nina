@@ -1,7 +1,8 @@
 module nina::lexer;
 
-import nina::types;
 import nina::core;
+import nina::types;
+import nina::highlighter;
 
 import std::io;
 import std::os;
@@ -116,8 +117,9 @@ fn void tokenize(Lexer* lexer, CompileContext* context) {
         }
 
         if (!core::range_compare(lexer.range, start_range)) {
-            io::eprintfn("unrecognized character '%c' in file '%s(%d:%d)'", lexer.current, lexer.filepath, lexer.range.line, lexer.range.column);
-            os::exit(1);
+            Range end = { start_range.line, start_range.column + 1 };
+
+            highlighter::error(context, start_range, end, "Unrecognized character '%c'", lexer.current);
         }
     }
 

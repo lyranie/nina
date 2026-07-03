@@ -2,6 +2,7 @@ module nina::analyser;
 
 import nina::scope;
 import nina::types;
+import nina::highlighter;
 
 import std::collections::map;
 import std::io;
@@ -38,20 +39,23 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
     case NodeType.CALL:
         analyse_call(analyser, context, node);
     default:
-        io::eprintfn("missing analyser function for type '%s'", node.type);
-        os::exit(1);
+        highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
 }
 
 fn void analyse_mod(Analyser* analyser, CompileContext* context, Node* node) {
     String path = node.mod_node.path.path_node.path;
 
-    if (context.mods.has_key(context.current_file)) {
-        io::eprintfn("Module '%s' already declared in '%s'", context.mods.get(context.current_file), context.current_file)!!;
-        os::exit(1);
+    if (context.mods.has_key(path)) {
+        highlighter::error(
+            context,
+            node.mod_node.path.range.from,
+            node.mod_node.path.range.to,
+            "Module '%s' already declared in file '%s'", path, context.mods.get(path)
+        )!!;
     }
 
-    context.mods.set(context.current_file, path);
+    context.mods.set(path, context.current_file);
 
     foreach (Node* statement : node.mod_node.statements) {
         analyse_node(analyser, context, statement);
@@ -63,9 +67,10 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
 
     String name = node.function_node.name.ident_node.name;
     if (scope::has_function(analyser.scope, name)) {
-        io::eprintfn("Function '%s' already defined", name);
-        io::eprintn("Previous definition was here");
-        os::exit(1);
+        FunctionInfo* prev = scope::get_function(analyser.scope, name);
+
+        highlighter::note(context, prev.node.range.from, prev.node.range.to, "Previous definition was here");
+        highlighter::error(context, node.range.from, node.range.to, "Function '%s' already defined", name);
     }
 
     scope::add_function(analyser.scope, context.alloc, name, analyser.module_name, context.current_file, node);
@@ -85,9 +90,8 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
         if (parameters.has_key(parameter_name)) {
             Node* prev = parameters.get(parameter_name)!!;
 
-            io::eprintfn("Parameter '%s' already defined", parameter_name);
-            io::eprintn("Previous definition was here");
-            os::exit(1);
+            highlighter::note(context, prev.range.from, prev.range.to, "Previous definition was here");
+            highlighter::error(context, parameter.range.from, parameter.range.to, "Parameter '%s' already defined", parameter_name);
         }
 
         parameters.set(parameter_name, parameter);
@@ -107,8 +111,7 @@ fn void analyse_type(Analyser* analyser, CompileContext* context, Node* node) {
     String name = node.type_node.name.ident_node.name;
 
     if (!context.lookup.has_key(name)) {
-        io::eprintfn("Could not find type '%s'", name);
-        os::exit(1);
+        highlighter::error(context, node.range.from, node.range.to, "Could not find type '%s'", name);
     }
 }
 
@@ -127,9 +130,10 @@ fn void analyse_ext(Analyser* analyser, CompileContext* context, Node* node) {
 
     String name = node.ext_node.name.ident_node.name;
     if (scope::has_function(analyser.scope, name)) {
-        io::eprintfn("Function '%s' already defined", name);
-        io::eprintn("Previous definition was here");
-        os::exit(1);
+        FunctionInfo* prev = scope::get_function(analyser.scope, name);
+        
+        highlighter::note(context, prev.node.range.from, prev.node.range.to, "Previous definition was here");
+        highlighter::error(context, node.range.from, node.range.to, "Function '%s' already defined", name);
     }
 
     scope::add_function(analyser.scope, context.alloc, name, analyser.module_name, context.current_file, node);
@@ -145,9 +149,8 @@ fn void analyse_ext(Analyser* analyser, CompileContext* context, Node* node) {
         if (parameters.has_key(parameter_name)) {
             Node* prev = parameters.get(parameter_name)!!;
 
-            io::eprintfn("Parameter '%s' already defined", parameter_name);
-            io::eprintn("Previous definition was here");
-            os::exit(1);
+            highlighter::note(context, prev.range.from, prev.range.to, "Previous definition was here");
+            highlighter::error(context, parameter.range.from, parameter.range.to, "Parameter '%s' already defined", parameter_name);
         }
 
         parameters.set(parameter_name, parameter);
@@ -159,8 +162,7 @@ fn void analyse_call(Analyser* analyser, CompileContext* context, Node* node) {
     String name = node.call_node.name.path_node.path;
 
     if (!scope::has_function(analyser.scope, name)) {
-        io::eprintfn("Could not find function '%s'", name);
-        os::exit(1);
+        highlighter::error(context, node.range.from, node.range.to, "Could not find function '%s'", name);
     }
 
     foreach (Node* argument : node.call_node.arguments) {

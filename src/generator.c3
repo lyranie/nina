@@ -6,6 +6,7 @@ import nina::debug;
 import nina::scope;
 import nina::types;
 import nina::lookup;
+import nina::highlighter;
 
 import std::collections::list;
 import std::io;
@@ -78,8 +79,7 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
     case NodeType.CALL:
         generate_call(generator, context, node);
     default:
-        io::eprintfn("Missing generator function for type '%s'", node.type);
-        os::exit(1);
+        highlighter::panic("Missing generator function for type '%s'", node.type);
     }
 
     return null;
@@ -212,7 +212,7 @@ fn LLVMValueRef generate_call(Generator* generator, CompileContext* context, Nod
         case NodeType.EXT:
             parameter_type = function_info.node.ext_node.parameters[i];
         default:
-            io::eprintn("unreachable");
+            highlighter::panic("Unreachable");
         }
 
         arguments.push(generate_node(generator, context, argument, parameter_type));
