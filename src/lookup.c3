@@ -14,6 +14,7 @@ fn Lookup* create(Allocator alloc) {
 
     register_type(lookup, alloc, "int",    "<builtin>", null, llvm::int_32_type());
     register_type(lookup, alloc, "char",   "<builtin>", null, llvm::int_8_type());
+    register_type(lookup, alloc, "long",   "<builtin>", null, llvm::int_64_type());
     register_type(lookup, alloc, "String", "<builtin>", null, llvm::array_type(llvm::int_8_type(), 0));
 
     return lookup;

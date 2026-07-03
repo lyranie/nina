@@ -70,9 +70,9 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
     case NodeType.FUNCTION:
         generate_function(generator, context, node);
     case NodeType.RET:
-        generate_ret(generator, context, node);
+        generate_ret(generator, context, node, data);
     case NodeType.INT:
-        return generate_int(generator, context, node);
+        return generate_int(generator, context, node, data);
     case NodeType.EXT:
         generate_ext(generator, context, node);
     case NodeType.CALL:
@@ -93,6 +93,7 @@ fn void generate_mod(Generator* generator, CompileContext* context, Node* node) 
 
 fn void generate_function(Generator* generator, CompileContext* context, Node* node) {
     String      name        = node.function_node.name.ident_node.name;
+    Node*       type        = node.function_node.type;
     LLVMTypeRef return_type = lookup::get_llvm_type(context.lookup, node.function_node.type);
 
     List{LLVMTypeRef} parameters;
@@ -134,24 +135,29 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
     }
 
     foreach (Node* statement : node.function_node.statements) {
-        generate_node(generator, context, statement);
+        generate_node(generator, context, statement, type);
     }
 
     generator.scope = generator.scope.parent;
 }
 
-fn void generate_ret(Generator* generator, CompileContext* context, Node* node) {
+fn void generate_ret(Generator* generator, CompileContext* context, Node* node, void* data) {
     Node* value = node.ret_node.value;
 
     if (value) {
-        llvm::build_ret(generator.llvm_builder, generate_node(generator, context, value));
+        llvm::build_ret(generator.llvm_builder, generate_node(generator, context, value, data));
     } else {
         llvm::build_ret_void(generator.llvm_builder);
     }
 }
 
-fn LLVMValueRef generate_int(Generator* generator, CompileContext* context, Node* node) {
+fn LLVMValueRef generate_int(Generator* generator, CompileContext* context, Node* node, void* data) {
     LLVMTypeRef int_type = context.lookup.get("int").llvm_type!!;
+
+    if (data) {
+        Node* parameter_type = data;
+        int_type = lookup::get_llvm_type(context.lookup, parameter_type);
+    }
 
     return llvm::const_int(int_type, (CULongLong)node.int_node.number.to_int(), llvm::TRUE)!!;
 }
@@ -192,8 +198,18 @@ fn LLVMValueRef generate_call(Generator* generator, CompileContext* context, Nod
     List{LLVMValueRef} arguments;
     arguments.init(context.alloc);
 
-    foreach (Node* argument : node.call_node.arguments) {
-        arguments.push(generate_node(generator, context, argument));
+    foreach (int i, Node* argument : node.call_node.arguments) {
+        Node* parameter_type = null;
+        switch (function_info.node.type) {
+        case NodeType.FUNCTION:
+            parameter_type = function_info.node.function_node.parameters[i];
+        case NodeType.EXT:
+            parameter_type = function_info.node.ext_node.parameters[i];
+        default:
+            io::eprintn("unreachable");
+        }
+
+        arguments.push(generate_node(generator, context, argument, parameter_type));
     }
 
     return llvm::build_call_2(
