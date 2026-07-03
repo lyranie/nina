@@ -10,6 +10,8 @@ fn Args* create(Allocator alloc) {
 
     args.cmd     = CompileCommand.NONE;
     args.emit_ir = false;
+    args.no_libc = false;
+    args.output  = "";
     args.files.init(alloc);
 
     return args;
@@ -23,19 +25,36 @@ fn void parse(Args* args, String[] argv) {
     for (int i = 1; i < argv.len; i++) {
         switch (String arg = argv[i]) {
         case "compile":
+            if ((long)i + 1 >= argv.len) {
+                print_help(argv[0]);
+            }
+
             args.cmd = CompileCommand.COMPILE;
 
             for (int j = i + 1; j < argv.len && !argv[j].starts_with("-"); j++, i++) {
                 args.files.push(argv[j]);
             }
         case "compile-run":
+            if ((long)i + 1 >= argv.len) {
+                print_help(argv[0]);
+            }
+
             args.cmd = CompileCommand.COMPILE_RUN;
 
             for (int j = i + 1; j < argv.len && !argv[j].starts_with("-"); j++, i++) {
                 args.files.push(argv[j]);
             }
+        case "--output":
+        case "-o":
+            if ((long)i + 1 >= argv.len) {
+                print_help(argv[0]);
+            }
+
+            args.output = argv[++i];
         case "--ir":
             args.emit_ir = true;
+        case "--no-libc":
+            args.no_libc = true;
         }
     }
 }
@@ -49,6 +68,8 @@ fn void print_help(String program) @noreturn @private {
     io::printfn("");
     io::printfn("Options:");
     io::printfn("  --ir                         Emits the generated IR files for the selected backend.");
+    io::printfn("  --no-libc                    Doesn't link against libc and the crt.");
+    io::printfn("  --output, -o <file>          Specifies the output filename.");
 
     os::exit(0);
 }

@@ -188,16 +188,18 @@ fn void emit(Generator* generator, CompileContext* context) {
     llvm::set_data_layout(generator.llvm_module, data_layout_str);
     llvm::dispose_target_data(data_layout);
 
-    if (llvm::target_machine_emit_to_file(target_machine, generator.llvm_module, (CChar*)string::format(context.alloc, "out/test.o", ), LLVMCodeGenFileType.OBJECT_FILE, &error))
+    if (llvm::target_machine_emit_to_file(target_machine, generator.llvm_module, (CChar*)string::format(context.alloc, "out/obj/%s.o", generator.module_name), LLVMCodeGenFileType.OBJECT_FILE, &error))
     {
         io::eprintfn("Failed to emit object file: %s", (ZString)error);
         llvm::dispose_message(error);
         os::exit(1);
     }
 
-    if (llvm::print_module_to_file(generator.llvm_module, "out/test.ll", &error) != 0) {
-        io::eprintn((ZString)error);
-        llvm::dispose_message(error);
+    if (context.args.emit_ir) {
+        if (llvm::print_module_to_file(generator.llvm_module, (CChar*)string::format(context.alloc, "out/ir/%s.ll", generator.module_name), &error) != 0) {
+            io::eprintn((ZString)error);
+            llvm::dispose_message(error);
+        }
     }
 }
 

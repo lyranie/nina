@@ -10,6 +10,12 @@ fn void main(String[] argv)
 {
     CompileContext* context = core::context_create();
 
+    profiler::commit(context.profiler, "Preparation");
+
+    path::mkdir("out")!!;
+    path::mkdir("out/obj")!!;
+    path::mkdir("out/ir")!!;
+
     profiler::commit(context.profiler, "Args");
     args::parse(context.args, argv);
 
@@ -48,10 +54,14 @@ fn void main(String[] argv)
 
     }
 
-    // linker::link(linker, context);
+    profiler::commit(context.profiler, "Linker");
 
-    // linker::free(linker);
+    Linker* linker = linker::create(context);
+
+    linker::link(linker, context);
 
     profiler::commit(context.profiler, "Cleanup");
+
+    linker::free(linker);
     core::context_free(context);
 }

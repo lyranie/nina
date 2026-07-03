@@ -40,12 +40,12 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
 fn void analyse_mod(Analyser* analyser, CompileContext* context, Node* node) {
     String path = node.mod_node.path.path_node.path;
 
-    if (context.mods.has_key(path)) {
-        io::eprintfn("Module '%s' already declared in '%s'", path, context.mods.get(path))!!;
+    if (context.mods.has_key(context.current_file)) {
+        io::eprintfn("Module '%s' already declared in '%s'", context.mods.get(context.current_file), context.current_file)!!;
         os::exit(1);
     }
 
-    context.mods.set(path, context.current_file);
+    context.mods.set(context.current_file, path);
 
     foreach (Node* statement : node.mod_node.statements) {
         analyse_node(analyser, context, statement);

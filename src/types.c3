@@ -18,6 +18,8 @@ struct Args {
     CompileCommand cmd;
     StringList     files;
     bool           emit_ir;
+    bool           no_libc;
+    String         output;
 }
 
 enum CompileCommand {
@@ -219,6 +221,22 @@ struct Generator {
     LLVMBuilderRef   llvm_builder;
     LLVMDIBuilderRef llvm_debug_builder;
     LLVMMetadataRef  llvm_debug_file;
+}
+
+struct Linker {
+    TargetOS   target_os;
+    TargetArch target_arch;
+    String     output;
+}
+
+enum TargetOS {
+    UNKNOWN,
+    LINUX,
+}
+
+enum TargetArch {
+    UNKNOWN,
+    X86_64,
 }
 
 // -- PROFILER --
