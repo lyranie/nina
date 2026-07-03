@@ -39,6 +39,30 @@ fn FunctionInfo* add_function(Scope* scope, Allocator alloc, String name, String
     return function;
 }
 
+fn bool has_function(Scope* scope, String name) {
+    if (scope.functions.has_key(name)) {
+        return true;
+    }
+
+    if (scope.parent) {
+        return has_function(scope.parent, name);
+    }
+
+    return false;
+}
+
+fn FunctionInfo* get_function(Scope* scope, String name) {
+    if (scope.functions.has_key(name)) {
+        return scope.functions.get(name)!!;
+    }
+
+    if (scope.parent) {
+        return get_function(scope.parent, name);
+    }
+
+    return null;
+}
+
 fn void free(Scope* scope) {
     if (scope == null) {
         return;

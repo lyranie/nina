@@ -4,6 +4,19 @@ fn bool char.is_newline(self) {
     return self == '\n' || self == '\r';
 }
 
+/*
+struct Token {
+    TokenType type;
+    String    value;
+
+    struct range {
+        Range start;
+        Range end;
+    }
+    void*     data;
+}
+*/
+
 module llvm;
 
 fn LLVMTypeRef slice_type(LLVMTypeRef base) {

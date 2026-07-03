@@ -73,6 +73,10 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
         generate_ret(generator, context, node);
     case NodeType.INT:
         return generate_int(generator, context, node);
+    case NodeType.EXT:
+        generate_ext(generator, context, node);
+    case NodeType.CALL:
+        generate_call(generator, context, node);
     default:
         io::eprintfn("Missing generator function for type '%s'", node.type);
         os::exit(1);
@@ -150,6 +154,56 @@ fn LLVMValueRef generate_int(Generator* generator, CompileContext* context, Node
     LLVMTypeRef int_type = context.lookup.get("int").llvm_type!!;
 
     return llvm::const_int(int_type, (CULongLong)node.int_node.number.to_int(), llvm::TRUE)!!;
+}
+
+fn void generate_ext(Generator* generator, CompileContext* context, Node* node) {
+    String      name        = node.ext_node.name.ident_node.name;
+    LLVMTypeRef return_type = lookup::get_llvm_type(context.lookup, node.ext_node.type);
+
+    List{LLVMTypeRef} parameters;
+    parameters.tinit();
+
+    foreach (Node* parameter : node.ext_node.parameters) {
+        LLVMTypeRef llvm_parameter_type = lookup::get_llvm_type(context.lookup, parameter);
+        parameters.push(llvm_parameter_type);
+    }
+
+    LLVMTypeRef  llvm_function_type  = llvm::function_type(return_type, parameters.to_array(context.alloc), (CUInt)parameters.len(), llvm::FALSE);
+    LLVMValueRef llvm_function_value = llvm::add_function(generator.llvm_module, (CChar*)name.ptr, llvm_function_type);
+
+    FunctionInfo* function_info = scope::add_function(
+        generator.scope,
+        context.alloc,
+        name,
+        generator.module_name,
+        context.current_file,
+        node,
+        llvm_function_type,
+        llvm_function_value
+    );
+
+    debug::add_function(generator, context, node, llvm_function_value);
+}
+
+fn LLVMValueRef generate_call(Generator* generator, CompileContext* context, Node* node) {
+    String        name          = node.call_node.name.path_node.path;
+    FunctionInfo* function_info = scope::get_function(generator.scope, name);
+
+    List{LLVMValueRef} arguments;
+    arguments.init(context.alloc);
+
+    foreach (Node* argument : node.call_node.arguments) {
+        arguments.push(generate_node(generator, context, argument));
+    }
+
+    return llvm::build_call_2(
+        generator.llvm_builder,
+        function_info.llvm_type,
+        function_info.llvm_value,
+        arguments.to_array(context.alloc),
+        (CUInt)arguments.len(),
+        ""
+    );
 }
 
 fn void emit(Generator* generator, CompileContext* context) {

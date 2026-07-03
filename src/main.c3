@@ -37,7 +37,7 @@ fn void main(String[] argv)
         // -- ANALYSER --
         profiler::commit(context.profiler, "Analyser");
 
-        Analyser* analyser = analyser::create(context.alloc);
+        Analyser* analyser = analyser::create(context.alloc, parser);
         analyser::analyse(analyser, context, parser);
 
         // -- GENERATOR --

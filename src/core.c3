@@ -81,6 +81,19 @@ fn void node_free(Node* node, Allocator alloc) {
         node_free(node.bin_node.right, alloc);
     case NodeType.INT:
         break;
+    case NodeType.EXT:
+        node_free(node.ext_node.type, alloc);
+        node_free(node.ext_node.name, alloc);
+
+        foreach (Node* parameter : node.ext_node.parameters) {
+            node_free(parameter, alloc);
+        }
+    case NodeType.CALL:
+        node_free(node.call_node.name, alloc);
+
+        foreach (Node* argument : node.call_node.arguments) {
+            node_free(argument, alloc);
+        }
     default:
         io::eprintfn("Missing node_free call for type %s", node.type);
         os::exit(1);

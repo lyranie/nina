@@ -183,7 +183,8 @@ fn void word(Lexer* lexer, CompileContext* context) => @pool() {
         type = TokenType.KW_MOD;
     case "ret":
         type = TokenType.KW_RET;
-
+    case "ext":
+        type = TokenType.KW_EXT;
     default:
         type = TokenType.IDENT;
     }

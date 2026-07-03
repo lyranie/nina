@@ -7,10 +7,12 @@ import std::collections::map;
 import std::io;
 import std::os;
 
-fn Analyser* create(Allocator alloc) {
+fn Analyser* create(Allocator alloc, Parser* parser) {
     Analyser* analyser = alloc::new(alloc, Analyser);
-
-    analyser.scope = scope::create(alloc);
+    String    mod      = parser.context.ast.mod_node.path.path_node.path;
+    
+    analyser.scope       = scope::create(alloc);
+    analyser.module_name = mod;
 
     return analyser;
 }
@@ -31,6 +33,10 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
         analyse_ret(analyser, context, node, data);
     case NodeType.INT:
         break;
+    case NodeType.EXT:
+        analyse_ext(analyser, context, node);
+    case NodeType.CALL:
+        analyse_call(analyser, context, node);
     default:
         io::eprintfn("missing analyser function for type '%s'", node.type);
         os::exit(1);
@@ -55,6 +61,15 @@ fn void analyse_mod(Analyser* analyser, CompileContext* context, Node* node) {
 fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node) {
     analyse_node(analyser, context, node.function_node.type);
 
+    String name = node.function_node.name.ident_node.name;
+    if (scope::has_function(analyser.scope, name)) {
+        io::eprintfn("Function '%s' already defined", name);
+        io::eprintn("Previous definition was here");
+        os::exit(1);
+    }
+
+    scope::add_function(analyser.scope, context.alloc, name, analyser.module_name, context.current_file, node);
+
     // TODO: check if there is a return statement present for each possible outcome
     Node*  type  = node.function_node.type;
     Scope* scope = scope::create(context.alloc, analyser.scope);
@@ -65,18 +80,18 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
     foreach (Node* parameter : node.function_node.parameters) {
         analyse_node(analyser, context, parameter.parameter_node.type);
 
-        String name = parameter.parameter_node.name.ident_node.name;
+        String parameter_name = parameter.parameter_node.name.ident_node.name;
 
-        if (parameters.has_key(name)) {
-            Node* prev = parameters.get(name)!!;
+        if (parameters.has_key(parameter_name)) {
+            Node* prev = parameters.get(parameter_name)!!;
 
-            io::eprintfn("Parameter '%s' already defined", name);
+            io::eprintfn("Parameter '%s' already defined", parameter_name);
             io::eprintn("Previous definition was here");
             os::exit(1);
         }
 
-        parameters.set(name, parameter);
-        scope::add_variable(analyser.scope, context.alloc, name, parameter);
+        parameters.set(parameter_name, parameter);
+        scope::add_variable(analyser.scope, context.alloc, parameter_name, parameter);
     }
 
     foreach (Node* statement : node.function_node.statements) {
@@ -104,6 +119,52 @@ fn void analyse_ret(Analyser* analyser, CompileContext* context, Node* node, voi
 
     if (node.ret_node.value) {
         analyse_node(analyser, context, node.ret_node.value);
+    }
+}
+
+fn void analyse_ext(Analyser* analyser, CompileContext* context, Node* node) {
+    analyse_node(analyser, context, node.ext_node.type);
+
+    String name = node.ext_node.name.ident_node.name;
+    if (scope::has_function(analyser.scope, name)) {
+        io::eprintfn("Function '%s' already defined", name);
+        io::eprintn("Previous definition was here");
+        os::exit(1);
+    }
+
+    scope::add_function(analyser.scope, context.alloc, name, analyser.module_name, context.current_file, node);
+
+    HashMap{String, Node*} parameters;
+    parameters.tinit();
+
+    foreach (Node* parameter : node.ext_node.parameters) {
+        analyse_node(analyser, context, parameter.parameter_node.type);
+
+        String parameter_name = parameter.parameter_node.name.ident_node.name;
+
+        if (parameters.has_key(parameter_name)) {
+            Node* prev = parameters.get(parameter_name)!!;
+
+            io::eprintfn("Parameter '%s' already defined", parameter_name);
+            io::eprintn("Previous definition was here");
+            os::exit(1);
+        }
+
+        parameters.set(parameter_name, parameter);
+        scope::add_variable(analyser.scope, context.alloc, parameter_name, parameter);
+    }
+}
+
+fn void analyse_call(Analyser* analyser, CompileContext* context, Node* node) {
+    String name = node.call_node.name.path_node.path;
+
+    if (!scope::has_function(analyser.scope, name)) {
+        io::eprintfn("Could not find function '%s'", name);
+        os::exit(1);
+    }
+
+    foreach (Node* argument : node.call_node.arguments) {
+        analyse_node(analyser, context, argument);
     }
 }
 

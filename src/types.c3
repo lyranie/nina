@@ -163,6 +163,15 @@ struct Node {
         struct int_node {
             String number;
         }
+        struct ext_node {
+            Node*    type;
+            Node*    name;
+            NodeList parameters;
+        }
+        struct call_node {
+            Node*    name;
+            NodeList arguments;
+        }
     }
 }
 
@@ -176,10 +185,13 @@ enum NodeType {
     FUNCTION,
     BIN,
     INT,
+    EXT,
+    CALL,
 }
 
 struct Analyser {
     Scope* scope;
+    String module_name;
 }
 
 struct Scope {

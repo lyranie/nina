@@ -35,6 +35,8 @@ fn void parse_mod(Parser* parser, CompileContext* context, Lexer* lexer) {
         switch (parser.current.type) {
         case TokenType.IDENT:
             statements.push(parse_function(parser, context, lexer));
+        case TokenType.KW_EXT:
+            statements.push(parse_ext(parser, context, lexer));
         default:
             io::eprintfn("missing parser case for type '%s'", parser.current.type);
             os::exit(1);
@@ -70,7 +72,7 @@ fn Node* parse_path(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     Range end = parser.current.range.end;
 
-    node.type = NodeType.PATH;
+    node.type           = NodeType.PATH;
     node.path_node.path = path.copy_str(context.alloc);
 
     path.free();
@@ -87,7 +89,7 @@ fn Node* parse_function(Parser* parser, CompileContext* context, Lexer* lexer) {
     NodeList parameters = parse_parameters(parser, context, lexer);
     NodeList statements = parse_compound(parser, context, lexer);
 
-    node.type = NodeType.FUNCTION;
+    node.type                     = NodeType.FUNCTION;
     node.function_node.type       = type;
     node.function_node.name       = name;
     node.function_node.parameters = parameters;
@@ -137,7 +139,7 @@ fn Node* parse_identifier(Parser* parser, CompileContext* context, Lexer* lexer)
 
     consume(parser, lexer, TokenType.IDENT);
     
-    node.type            = IDENT;
+    node.type            = NodeType.IDENT;
     node.ident_node.name = name;
 
     return node;
@@ -155,7 +157,7 @@ fn NodeList parse_parameters(Parser* parser, CompileContext* context, Lexer* lex
         Node* parameter_type = parse_type(parser, context, lexer);
         Node* parameter_name = parse_identifier(parser, context, lexer);
 
-        parameter_node.type = PARAMETER;
+        parameter_node.type                = PARAMETER;
         parameter_node.parameter_node.type = parameter_type;
         parameter_node.parameter_node.name = parameter_name;
 
@@ -169,7 +171,7 @@ fn NodeList parse_parameters(Parser* parser, CompileContext* context, Lexer* lex
             Node* other_parameter_type = parse_type(parser, context, lexer);
             Node* other_parameter_name = parse_identifier(parser, context, lexer);
 
-            other_parameter_node.type = PARAMETER;
+            other_parameter_node.type                = PARAMETER;
             other_parameter_node.parameter_node.type = other_parameter_type;
             other_parameter_node.parameter_node.name = other_parameter_name;
 
@@ -192,8 +194,11 @@ fn NodeList parse_compound(Parser* parser, CompileContext* context, Lexer* lexer
         switch (parser.current.type) {
         case TokenType.KW_RET:
             statements.push(parse_ret(parser, context, lexer));
+        case TokenType.IDENT:
+            statements.push(parse_identifier_statement(parser, context, lexer));
         default:
             io::eprintfn("missing parser compound function for type '%s'", parser.current.type);
+            os::exit(1);
         }
     }
 
@@ -236,7 +241,7 @@ fn Node* parse_expr(Parser* parser, CompileContext* context, Lexer* lexer) {
 
         Node* right = parse_term(parser, context, lexer);
         
-        node.type = NodeType.BIN;
+        node.type              = NodeType.BIN;
         node.bin_node.operator = operator;
         node.bin_node.left     = left;
         node.bin_node.right    = right;
@@ -261,7 +266,7 @@ fn Node* parse_term(Parser* parser, CompileContext* context, Lexer* lexer) {
 
         Node* right = parse_factor(parser, context, lexer);
         
-        node.type = NodeType.BIN;
+        node.type              = NodeType.BIN;
         node.bin_node.operator = operator;
         node.bin_node.left     = left;
         node.bin_node.right    = right;
@@ -292,10 +297,77 @@ fn Node* parse_int(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     consume(parser, lexer, TokenType.INT);
 
-    node.type            = INT;
+    node.type            = NodeType.INT;
     node.int_node.number = number;
 
     return node;
+}
+
+fn Node* parse_ext(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Node* node = alloc::new(context.alloc, Node);
+
+    consume(parser, lexer, TokenType.KW_EXT);
+
+    Node*    type       = parse_type(parser, context, lexer);
+    Node*    name       = parse_identifier(parser, context, lexer);
+    NodeList parameters = parse_parameters(parser, context, lexer);
+
+    consume(parser, lexer, TokenType.SEMI);
+
+    node.type                = NodeType.EXT;
+    node.ext_node.type       = type;
+    node.ext_node.name       = name;
+    node.ext_node.parameters = parameters;
+
+    return node;
+}
+
+fn Node* parse_identifier_statement(Parser* parser, CompileContext* context, Lexer* lexer) {
+    switch (peek(parser, lexer).type) {
+    case TokenType.LPAREN:
+        Node* node = parse_call(parser, context, lexer);
+
+        consume(parser, lexer, TokenType.SEMI);
+
+        return node;
+    default:
+        io::eprintfn("Not yet implemented: '%s'", parser.current);
+        os::exit(1);
+    }
+}
+
+fn Node* parse_call(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Node* node = alloc::new(context.alloc, Node);
+
+    Node*    path      = parse_path(parser, context, lexer);
+    NodeList arguments = parse_arguments(parser, context, lexer);
+
+    node.type                = NodeType.CALL;
+    node.call_node.name      = path;
+    node.call_node.arguments = arguments;
+
+    return node;
+}
+
+fn NodeList parse_arguments(Parser* parser, CompileContext* context, Lexer* lexer) {
+    NodeList arguments;
+    arguments.init(context.alloc);
+
+    consume(parser, lexer, TokenType.LPAREN);
+    
+    if (parser.current.type != TokenType.RPAREN) {
+        arguments.push(parse_expr(parser, context, lexer));
+
+        while (parser.current.type == TokenType.COMMA) {
+            consume(parser, lexer, TokenType.COMMA);
+
+            arguments.push(parse_expr(parser, context, lexer));
+        }
+    }
+
+    consume(parser, lexer, TokenType.RPAREN);
+
+    return arguments;
 }
 
 fn void consume(Parser* parser, Lexer* lexer, TokenType type) {
@@ -314,6 +386,14 @@ fn void consume(Parser* parser, Lexer* lexer, TokenType type) {
     if ((long)parser.cursor + 1 < lexer.context.tokens.len()) {
         parser.current = lexer.context.tokens.get(++parser.cursor);
     }
+}
+
+fn Token peek(Parser* parser, Lexer* lexer, int count = 1) {
+    if ((long)parser.cursor + count >= lexer.context.tokens.len()) {
+        return types::TOKEN_EMPTY;
+    }
+
+    return lexer.context.tokens[(long)parser.cursor + count];
 }
 
 fn void free(Parser* parser, Allocator alloc) {
