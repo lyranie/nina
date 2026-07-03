@@ -93,3 +93,17 @@ fn LLVMValueRef add_parameter(Generator* generator, CompileContext* context, Nod
 
     return llvm_alloca;
 }
+
+fn void set_location(Generator* generator, CUInt line, CUInt column) {
+    LLVMValueRef    llvm_function_value = llvm::get_basic_block_parent(llvm::get_insert_block(generator.llvm_builder));
+    LLVMMetadataRef llvm_subprogram     = llvm::get_subprogram(llvm_function_value);
+    LLVMMetadataRef llvm_debug_location = llvm::di_builder_create_debug_location(
+        llvm::get_global_context(),
+        line,
+        column,
+        llvm_subprogram,
+        null
+    );
+
+    llvm::set_current_debug_location_2(generator.llvm_builder, llvm_debug_location);
+}

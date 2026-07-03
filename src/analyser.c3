@@ -72,7 +72,7 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
 
     // TODO: check if there is a return statement present for each possible outcome
     Node*  type  = node.function_node.type;
-    Scope* scope = scope::create(context.alloc, analyser.scope);
+    analyser.scope = scope::create(context.alloc, analyser.scope);
 
     HashMap{String, Node*} parameters;
     parameters.tinit();

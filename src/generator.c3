@@ -144,6 +144,8 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
 fn void generate_ret(Generator* generator, CompileContext* context, Node* node, void* data) {
     Node* value = node.ret_node.value;
 
+    debug::set_location(generator, 420, 67);
+
     if (value) {
         llvm::build_ret(generator.llvm_builder, generate_node(generator, context, value, data));
     } else {
@@ -153,6 +155,8 @@ fn void generate_ret(Generator* generator, CompileContext* context, Node* node, 
 
 fn LLVMValueRef generate_int(Generator* generator, CompileContext* context, Node* node, void* data) {
     LLVMTypeRef int_type = context.lookup.get("int").llvm_type!!;
+
+    debug::set_location(generator, 420, 67);
 
     if (data) {
         Node* parameter_type = data;
@@ -194,6 +198,8 @@ fn void generate_ext(Generator* generator, CompileContext* context, Node* node) 
 fn LLVMValueRef generate_call(Generator* generator, CompileContext* context, Node* node) {
     String        name          = node.call_node.name.path_node.path;
     FunctionInfo* function_info = scope::get_function(generator.scope, name);
+
+    debug::set_location(generator, 420, 67);
 
     List{LLVMValueRef} arguments;
     arguments.init(context.alloc);
