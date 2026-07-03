@@ -1,0 +1,5 @@
+mod test.main;
+
+int main(int argc, char** argv) {
+    ret 0;
+}
