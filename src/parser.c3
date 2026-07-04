@@ -52,12 +52,11 @@ fn void parse_mod(Parser* parser, CompileContext* context, Lexer* lexer) {
     statements.free();
 }
 
-fn Node* parse_path(Parser* parser, CompileContext* context, Lexer* lexer) {
-    Node* node  = alloc::new(context.alloc, Node);
+fn Node* parse_path(Parser* parser, CompileContext* context, Lexer* lexer) => @pool() {
     Range start = parser.current.range.start;
 
     DString path;
-    path.init(context.alloc);
+    path.tinit();
 
     path.append(parser.current.value);
     consume(parser, context, lexer, TokenType.IDENT);
@@ -72,18 +71,12 @@ fn Node* parse_path(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     Range end = peek(parser, lexer, -1).range.end;
 
-    node.type           = NodeType.PATH;
-    node.range.from     = start;
-    node.range.to       = end;
-    node.path_node.path = path.copy_str(context.alloc);
-
-    path.free();
-
-    return node;
+    return @make_node(context, NodeType.PATH, start, end; node) {
+        node.path_node.path = path.copy_str(context.alloc);
+    };
 }
 
 fn Node* parse_function(Parser* parser, CompileContext* context, Lexer* lexer) {
-    Node* node  = alloc::new(context.alloc, Node);
     Range start = parser.current.range.start;
 
     Node*    type       = parse_type(parser, context, lexer);
@@ -93,22 +86,17 @@ fn Node* parse_function(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     Range end = peek(parser, lexer, -1).range.end;
 
-    node.type                     = NodeType.FUNCTION;
-    node.range.from               = start;
-    node.range.to                 = end;
-    node.function_node.type       = type;
-    node.function_node.name       = name;
-    node.function_node.parameters = parameters;
-    node.function_node.statements = statements;
-
-    return node;
+    return @make_node(context, NodeType.FUNCTION, start, end; node) {
+        node.function_node.type       = type;
+        node.function_node.name       = name;
+        node.function_node.parameters = parameters;
+        node.function_node.statements = statements;
+    };
 }
 
-fn Node* parse_type(Parser* parser, CompileContext* context, Lexer* lexer) {
-    Node* node  = alloc::new(context.alloc, Node);
+fn Node* parse_type(Parser* parser, CompileContext* context, Lexer* lexer) => @pool() {
     Range start = parser.current.range.start;
-
-    Node* name = parse_identifier(parser, context, lexer);
+    Node* name  = parse_identifier(parser, context, lexer);
 
     DString suffix;
     suffix.tinit();
@@ -131,32 +119,23 @@ fn Node* parse_type(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     Range end = peek(parser, lexer, -1).range.end;
 
-    node.type             = NodeType.TYPE;
-    node.range.from       = start;
-    node.range.to         = end;
-    node.type_node.name   = name;
-    node.type_node.suffix = suffix.copy_str(context.alloc);
-
-    suffix.free();
-
-    return node;
+    return @make_node(context, NodeType.TYPE, start, end; node) {
+        node.type_node.name   = name;
+        node.type_node.suffix = suffix.copy_str(context.alloc);
+    };
 }
 
 fn Node* parse_identifier(Parser* parser, CompileContext* context, Lexer* lexer) {
-    Node*  node  = alloc::new(context.alloc, Node);
     Range  start = parser.current.range.start;
     String name  = parser.current.value;
 
     consume(parser, context, lexer, TokenType.IDENT);
     
     Range end = peek(parser, lexer, -1).range.end;
-    
-    node.type            = NodeType.IDENT;
-    node.range.from      = start;
-    node.range.to        = end;
-    node.ident_node.name = name;
 
-    return node;
+    return @make_node(context, NodeType.IDENT, start, end; node) {
+        node.ident_node.name = name;
+    };
 }
 
 fn NodeList parse_parameters(Parser* parser, CompileContext* context, Lexer* lexer) {
@@ -166,10 +145,8 @@ fn NodeList parse_parameters(Parser* parser, CompileContext* context, Lexer* lex
     consume(parser, context, lexer, TokenType.LPAREN);
     
     if (parser.current.type != TokenType.RPAREN) {
-        Node* parameter_node  = alloc::new(context.alloc, Node);
         Range parameter_start = parser.current.range.start;
-
-        Node* parameter_type = null;
+        Node* parameter_type  = null;
 
         if (
             peek(parser, lexer).type == TokenType.ASTERISK ||
@@ -188,23 +165,18 @@ fn NodeList parse_parameters(Parser* parser, CompileContext* context, Lexer* lex
         }
 
         Range parameter_end = peek(parser, lexer, -1).range.end;
-        
-        parameter_node.type                 = PARAMETER;
-        parameter_node.range.from           = parameter_start;
-        parameter_node.range.to             = parameter_end;
-        parameter_node.parameter_node.type  = parameter_type;
-        parameter_node.parameter_node.name  = parameter_name;
-        parameter_node.parameter_node.vaarg = parameter_vaarg;
 
-        parameters.push(parameter_node);
+        parameters.push(@make_node(context, NodeType.PARAMETER, parameter_start, parameter_end; node) {
+            node.parameter_node.type  = parameter_type;
+            node.parameter_node.name  = parameter_name;
+            node.parameter_node.vaarg = parameter_vaarg;
+        });
 
         while (parser.current.type == TokenType.COMMA) {
             consume(parser, context, lexer, TokenType.COMMA);
 
-            Node* other_parameter_node  = alloc::new(context.alloc, Node);
             Range other_parameter_start = parser.current.range.start;
-
-            Node* other_parameter_type = null;
+            Node* other_parameter_type  = null;
             
             if (
                 peek(parser, lexer).type == TokenType.ASTERISK ||
@@ -224,14 +196,11 @@ fn NodeList parse_parameters(Parser* parser, CompileContext* context, Lexer* lex
             
             Range other_parameter_end = peek(parser, lexer, -1).range.end;
 
-            other_parameter_node.type                 = PARAMETER;
-            other_parameter_node.range.from           = other_parameter_start;
-            other_parameter_node.range.to             = other_parameter_end;
-            other_parameter_node.parameter_node.type  = other_parameter_type;
-            other_parameter_node.parameter_node.name  = other_parameter_name;
-            other_parameter_node.parameter_node.vaarg = other_parameter_vaarg;
-
-            parameters.push(other_parameter_node);
+            parameters.push(@make_node(context, NodeType.PARAMETER, other_parameter_start, other_parameter_end; node) {
+                node.parameter_node.type  = other_parameter_type;
+                node.parameter_node.name  = other_parameter_name;
+                node.parameter_node.vaarg = other_parameter_vaarg;
+            });
         }
     }
 
@@ -263,7 +232,6 @@ fn NodeList parse_compound(Parser* parser, CompileContext* context, Lexer* lexer
 }
 
 fn Node* parse_ret(Parser* parser, CompileContext* context, Lexer* lexer) {
-    Node* node  = alloc::new(context.alloc, Node);
     Range start = parser.current.range.start;
 
     consume(parser, context, lexer, TokenType.KW_RET);
@@ -277,12 +245,9 @@ fn Node* parse_ret(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     Range end = peek(parser, lexer, -1).range.end;
 
-    node.type           = NodeType.RET;
-    node.range.from     = start;
-    node.range.to       = end;
-    node.ret_node.value = value;
-
-    return node;
+    return @make_node(context, NodeType.RET, start, end; node) {
+        node.ret_node.value = value;
+    };
 }
 
 fn Node* parse_expr(Parser* parser, CompileContext* context, Lexer* lexer) {
@@ -301,12 +266,11 @@ fn Node* parse_expr(Parser* parser, CompileContext* context, Lexer* lexer) {
 
         Node* right = parse_term(parser, context, lexer);
         
-        node.type              = NodeType.BIN;
-        node.range.from        = left.range.from;
-        node.range.to          = right.range.to;
-        node.bin_node.operator = operator;
-        node.bin_node.left     = left;
-        node.bin_node.right    = right;
+        node = @make_node(context, NodeType.BIN, left.range.from, right.range.to; unused) {
+            node.bin_node.operator = operator;
+            node.bin_node.left     = left;
+            node.bin_node.right    = right;
+        };
     }
 
     return node;
@@ -328,12 +292,11 @@ fn Node* parse_term(Parser* parser, CompileContext* context, Lexer* lexer) {
 
         Node* right = parse_factor(parser, context, lexer);
         
-        node.type              = NodeType.BIN;
-        node.range.from        = left.range.from;
-        node.range.to          = right.range.to;
-        node.bin_node.operator = operator;
-        node.bin_node.left     = left;
-        node.bin_node.right    = right;
+        node = @make_node(context, NodeType.BIN, left.range.from, right.range.to; unused) {
+            node.bin_node.operator = operator;
+            node.bin_node.left     = left;
+            node.bin_node.right    = right;
+        };
     }
 
     return node;
@@ -358,7 +321,6 @@ fn Node* parse_factor(Parser* parser, CompileContext* context, Lexer* lexer) {
 }
 
 fn Node* parse_int(Parser* parser, CompileContext* context, Lexer* lexer) {
-    Node* node  = alloc::new(context.alloc, Node);
     Range start = parser.current.range.start;
     Range end   = parser.current.range.end;
 
@@ -366,16 +328,12 @@ fn Node* parse_int(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     consume(parser, context, lexer, TokenType.INT);
 
-    node.type            = NodeType.INT;
-    node.range.from      = start;
-    node.range.to        = end;
-    node.int_node.number = number;
-
-    return node;
+    return @make_node(context, NodeType.INT, start, end; node) {
+        node.int_node.number = number;
+    };
 }
 
 fn Node* parse_ext(Parser* parser, CompileContext* context, Lexer* lexer) {
-    Node* node  = alloc::new(context.alloc, Node);
     Range start = parser.current.range.start;
 
     consume(parser, context, lexer, TokenType.KW_EXT);
@@ -388,14 +346,11 @@ fn Node* parse_ext(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     Range end = peek(parser, lexer, -1).range.end;
 
-    node.type                = NodeType.EXT;
-    node.range.from          = start;
-    node.range.to            = end;
-    node.ext_node.type       = type;
-    node.ext_node.name       = name;
-    node.ext_node.parameters = parameters;
-
-    return node;
+    return @make_node(context, NodeType.EXT, start, end; node) {
+        node.ext_node.type       = type;
+        node.ext_node.name       = name;
+        node.ext_node.parameters = parameters;
+    };
 }
 
 fn Node* parse_identifier_statement(Parser* parser, CompileContext* context, Lexer* lexer) {
@@ -412,7 +367,6 @@ fn Node* parse_identifier_statement(Parser* parser, CompileContext* context, Lex
 }
 
 fn Node* parse_call(Parser* parser, CompileContext* context, Lexer* lexer) {
-    Node* node  = alloc::new(context.alloc, Node);
     Range start = parser.current.range.start;
 
     Node*    path      = parse_path(parser, context, lexer);
@@ -420,13 +374,10 @@ fn Node* parse_call(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     Range end = peek(parser, lexer, -1).range.end;
 
-    node.type                = NodeType.CALL;
-    node.range.from          = start;
-    node.range.to            = end;
-    node.call_node.name      = path;
-    node.call_node.arguments = arguments;
-
-    return node;
+    return @make_node(context, NodeType.CALL, start, end; node) {
+        node.call_node.name      = path;
+        node.call_node.arguments = arguments;
+    };
 }
 
 fn NodeList parse_arguments(Parser* parser, CompileContext* context, Lexer* lexer) {
@@ -451,7 +402,6 @@ fn NodeList parse_arguments(Parser* parser, CompileContext* context, Lexer* lexe
 }
 
 fn Node* parse_bool(Parser* parser, CompileContext* context, Lexer* lexer) {
-    Node* node  = alloc::new(context.alloc, Node);
     Range start = parser.current.range.start;
     Range end   = parser.current.range.end;
 
@@ -459,16 +409,12 @@ fn Node* parse_bool(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     consume(parser, context, lexer, parser.current.type);
 
-    node.type            = NodeType.BOOL;
-    node.range.from      = start;
-    node.range.to        = end;
-    node.bool_node.value = value;
-
-    return node;
+    return @make_node(context, NodeType.BOOL, start, end; node) {
+        node.bool_node.value = value;
+    };
 }
 
 fn Node* parse_string(Parser* parser, CompileContext* context, Lexer* lexer) {
-    Node* node  = alloc::new(context.alloc, Node);
     Range start = parser.current.range.start;
     Range end   = parser.current.range.end;
 
@@ -476,12 +422,9 @@ fn Node* parse_string(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     consume(parser, context, lexer, TokenType.STRING);
 
-    node.type               = NodeType.STRING;
-    node.range.from         = start;
-    node.range.to           = end;
-    node.string_node.string = string;
-
-    return node;
+    return @make_node(context, NodeType.STRING, start, end; node) {
+        node.string_node.string = string;
+    };
 }
 
 fn void consume(Parser* parser, CompileContext* context, Lexer* lexer, TokenType type) {
@@ -500,6 +443,18 @@ fn Token peek(Parser* parser, Lexer* lexer, int count = 1) {
     }
 
     return lexer.context.tokens[(long)parser.cursor + count];
+}
+
+macro Node* @make_node(CompileContext* context, NodeType type, Range from, Range to; @body(Node*)) {
+    Node* node = alloc::new(context.alloc, Node);
+
+    node.type       = type;
+    node.range.from = from;
+    node.range.to   = to;
+
+    @body(node);
+
+    return node;
 }
 
 fn void free(Parser* parser, Allocator alloc) {
