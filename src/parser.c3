@@ -313,6 +313,9 @@ fn Node* parse_factor(Parser* parser, CompileContext* context, Lexer* lexer) {
     switch (parser.current.type) {
     case INT:
         node = parse_int(parser, context, lexer);
+    case TRUE:
+    case FALSE:
+        node = parse_bool(parser, context, lexer);
     default:
         highlighter::error(context, parser.current.range.start, parser.current.range.end, "Expression expected, got '%s'", parser.current.type);
     }
@@ -411,6 +414,23 @@ fn NodeList parse_arguments(Parser* parser, CompileContext* context, Lexer* lexe
     consume(parser, context, lexer, TokenType.RPAREN);
 
     return arguments;
+}
+
+fn Node* parse_bool(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Node* node  = alloc::new(context.alloc, Node);
+    Range start = parser.current.range.start;
+    Range end   = parser.current.range.end;
+
+    String value = parser.current.value;
+
+    consume(parser, context, lexer, parser.current.type);
+
+    node.type            = NodeType.BOOL;
+    node.range.from      = start;
+    node.range.to        = end;
+    node.bool_node.value = value;
+
+    return node;
 }
 
 fn void consume(Parser* parser, CompileContext* context, Lexer* lexer, TokenType type) {

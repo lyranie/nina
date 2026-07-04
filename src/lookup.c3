@@ -13,6 +13,7 @@ fn Lookup* create(Allocator alloc) {
     lookup.init(alloc);
 
     register_type(lookup, alloc, "int",    "<builtin>", null, llvm::int_32_type());
+    register_type(lookup, alloc, "bool",   "<builtin>", null, llvm::int_1_type());
     register_type(lookup, alloc, "char",   "<builtin>", null, llvm::int_8_type());
     register_type(lookup, alloc, "long",   "<builtin>", null, llvm::int_64_type());
     register_type(lookup, alloc, "String", "<builtin>", null, llvm::array_type(llvm::int_8_type(), 0));
@@ -97,6 +98,11 @@ fn LLVMMetadataRef get_llvm_debug_type_from_kind(Allocator alloc, Generator* gen
     case LLVMTypeKind.INTEGER_TYPE_KIND:
         CUInt  width = llvm::get_int_type_width(llvm_type);
         String name  = string::format(alloc, "i%d", width);
+
+        if (width == 1) {
+            name.free(alloc);
+            name = "bool";
+        }
 
         return llvm::di_builder_create_basic_type(generator.llvm_debug_builder, (CChar*)name.ptr, (CUInt)name.len, width, 5, LLVMDIFlags.DI_FLAG_ZERO);
     default:

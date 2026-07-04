@@ -149,6 +149,7 @@ struct Node {
         struct parameter_node {
             Node* type;
             Node* name;
+            bool  vaarg;
         }
         struct ret_node {
             Node* value;
@@ -176,6 +177,9 @@ struct Node {
             Node*    name;
             NodeList arguments;
         }
+        struct bool_node {
+            String value;
+        }
     }
 }
 
@@ -191,6 +195,7 @@ enum NodeType {
     INT,
     EXT,
     CALL,
+    BOOL,
 }
 
 struct Analyser {

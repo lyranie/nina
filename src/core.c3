@@ -94,6 +94,8 @@ fn void node_free(Node* node, Allocator alloc) {
         foreach (Node* argument : node.call_node.arguments) {
             node_free(argument, alloc);
         }
+    case NodeType.BOOL:
+        break;
     default:
         io::eprintfn("Missing node_free call for type %s", node.type);
         os::exit(1);

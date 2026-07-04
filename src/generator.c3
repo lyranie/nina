@@ -30,13 +30,17 @@ fn Generator* create(CompileContext* context, Parser* parser) {
         llvm::value_as_metadata(llvm::const_int(llvm::int_32_type(), llvm::debug_metadata_version(), llvm::FALSE))
     );
 
+    String file = context.current_file.to_path(context.alloc).basename().copy(context.alloc)!!;
+    String path = context.current_file.trim_right(file);
+
     generator.llvm_builder       = llvm::create_builder();
     generator.llvm_debug_builder = llvm::create_di_builder(generator.llvm_module);
     generator.llvm_debug_file    = llvm::di_builder_create_file(
         generator.llvm_debug_builder,
-        (CChar*)context.current_file.ptr,
-        (CUInt)context.current_file.len,
-        "", 0 // TODO: splt absolute path
+        (CChar*)file.ptr,
+        (CUInt)file.len,
+        (CChar*)path.ptr,
+        (CUInt)path.len
     );
 
     llvm::di_builder_create_compile_unit(
@@ -78,6 +82,8 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
         generate_ext(generator, context, node);
     case NodeType.CALL:
         generate_call(generator, context, node);
+    case NodeType.BOOL:
+        return generate_bool(generator, context, node);
     default:
         highlighter::panic("Missing generator function for type '%s'", node.type);
     }
@@ -228,6 +234,15 @@ fn LLVMValueRef generate_call(Generator* generator, CompileContext* context, Nod
     );
 }
 
+fn LLVMValueRef generate_bool(Generator* generator, CompileContext* context, Node* node) {
+    LLVMTypeRef bool_type = context.lookup.get("bool").llvm_type!!;
+    CULongLong  value     = node.bool_node.value == "true" ? 1 : 0;
+
+    debug::set_location(generator, node.range.from.line, node.range.from.column);
+
+    return llvm::const_int(bool_type, value, llvm::FALSE);
+}
+
 fn void emit(Generator* generator, CompileContext* context) {
     llvm::di_builder_finalize(generator.llvm_debug_builder);
 
@@ -264,18 +279,18 @@ fn void emit(Generator* generator, CompileContext* context) {
     llvm::set_data_layout(generator.llvm_module, data_layout_str);
     llvm::dispose_target_data(data_layout);
 
-    if (llvm::target_machine_emit_to_file(target_machine, generator.llvm_module, (CChar*)string::format(context.alloc, "out/obj/%s.o", generator.module_name), LLVMCodeGenFileType.OBJECT_FILE, &error))
-    {
-        io::eprintfn("Failed to emit object file: %s", (ZString)error);
-        llvm::dispose_message(error);
-        os::exit(1);
-    }
-
     if (context.args.emit_ir) {
         if (llvm::print_module_to_file(generator.llvm_module, (CChar*)string::format(context.alloc, "out/ir/%s.ll", generator.module_name), &error) != 0) {
             io::eprintn((ZString)error);
             llvm::dispose_message(error);
         }
+    }
+
+    if (llvm::target_machine_emit_to_file(target_machine, generator.llvm_module, (CChar*)string::format(context.alloc, "out/obj/%s.o", generator.module_name), LLVMCodeGenFileType.OBJECT_FILE, &error))
+    {
+        io::eprintfn("Failed to emit object file: %s", (ZString)error);
+        llvm::dispose_message(error);
+        os::exit(1);
     }
 }
 

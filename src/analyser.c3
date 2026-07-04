@@ -38,6 +38,8 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
         analyse_ext(analyser, context, node);
     case NodeType.CALL:
         analyse_call(analyser, context, node);
+    case NodeType.BOOL:
+        break;
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
