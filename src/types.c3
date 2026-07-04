@@ -180,6 +180,9 @@ struct Node {
         struct bool_node {
             String value;
         }
+        struct string_node {
+            String string;
+        }
     }
 }
 
@@ -196,6 +199,7 @@ enum NodeType {
     EXT,
     CALL,
     BOOL,
+    STRING,
 }
 
 struct Analyser {

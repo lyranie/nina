@@ -1,22 +1,9 @@
 mod test.main;
 
-ext int putchar(char c);
+ext int printf(char* fmt, args...);
 
 int main(int argc, char** argv) {
-    putchar(72);
-    putchar(101);
-    putchar(108);
-    putchar(108);
-    putchar(111);
-    putchar(44);
-    putchar(32);
-    putchar(87);
-    putchar(111);
-    putchar(114);
-    putchar(108);
-    putchar(100);
-    putchar(33);
-    putchar(10);
+    printf("Hello, %s!\n", "World");
 
-    ret 69;
+    ret 0;
 }

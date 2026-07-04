@@ -9,6 +9,8 @@ import std::thread;
 
 fn void main(String[] argv)
 {
+    @todo("mark type narrowing as error without explicit cast");
+
     CompileContext* context = core::context_create();
 
     profiler::commit(context.profiler, "Preparation");

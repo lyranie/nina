@@ -1,21 +1,22 @@
 module nina;
 
+import std::io;
+
 fn bool char.is_newline(self) {
     return self == '\n' || self == '\r';
 }
 
-/*
-struct Token {
-    TokenType type;
-    String    value;
-
-    struct range {
-        Range start;
-        Range end;
-    }
-    void*     data;
+macro @todo(String fmt, args...) @builtin {
+$if $feature(DEBUG):
+    io::print(ansi::color_rgb(255, 204, 255, true));
+    io::print(Ansi.BLACK);
+    io::print(Ansi.BOLD);
+    io::print("TODO: ");
+    io::printf(fmt, ...args);
+    io::printf(" (%s %d)", $$FILE, $$LINE);
+    io::printn(Ansi.RESET);
+$endif
 }
-*/
 
 module llvm;
 

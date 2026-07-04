@@ -169,16 +169,32 @@ fn NodeList parse_parameters(Parser* parser, CompileContext* context, Lexer* lex
         Node* parameter_node  = alloc::new(context.alloc, Node);
         Range parameter_start = parser.current.range.start;
 
-        Node* parameter_type = parse_type(parser, context, lexer);
+        Node* parameter_type = null;
+
+        if (
+            peek(parser, lexer).type == TokenType.ASTERISK ||
+            peek(parser, lexer).type == TokenType.LBRACKET ||
+            peek(parser, lexer).type == TokenType.IDENT)
+        {
+            parameter_type = parse_type(parser, context, lexer);
+        }
+
         Node* parameter_name = parse_identifier(parser, context, lexer);
+        bool  parameter_vaarg;
+
+        if (parser.current.type == TokenType.ELLIPSE) {
+            parameter_vaarg = true;
+            consume(parser, context, lexer, TokenType.ELLIPSE);
+        }
 
         Range parameter_end = peek(parser, lexer, -1).range.end;
         
-        parameter_node.type                = PARAMETER;
-        parameter_node.range.from          = parameter_start;
-        parameter_node.range.to            = parameter_end;
-        parameter_node.parameter_node.type = parameter_type;
-        parameter_node.parameter_node.name = parameter_name;
+        parameter_node.type                 = PARAMETER;
+        parameter_node.range.from           = parameter_start;
+        parameter_node.range.to             = parameter_end;
+        parameter_node.parameter_node.type  = parameter_type;
+        parameter_node.parameter_node.name  = parameter_name;
+        parameter_node.parameter_node.vaarg = parameter_vaarg;
 
         parameters.push(parameter_node);
 
@@ -188,16 +204,32 @@ fn NodeList parse_parameters(Parser* parser, CompileContext* context, Lexer* lex
             Node* other_parameter_node  = alloc::new(context.alloc, Node);
             Range other_parameter_start = parser.current.range.start;
 
-            Node* other_parameter_type = parse_type(parser, context, lexer);
+            Node* other_parameter_type = null;
+            
+            if (
+                peek(parser, lexer).type == TokenType.ASTERISK ||
+                peek(parser, lexer).type == TokenType.LBRACKET ||
+                peek(parser, lexer).type == TokenType.IDENT)
+            {
+                other_parameter_type = parse_type(parser, context, lexer);
+            }
+
             Node* other_parameter_name = parse_identifier(parser, context, lexer);
+            bool  other_parameter_vaarg;
+
+            if (parser.current.type == TokenType.ELLIPSE) {
+                other_parameter_vaarg = true;
+                consume(parser, context, lexer, TokenType.ELLIPSE);
+            }
             
             Range other_parameter_end = peek(parser, lexer, -1).range.end;
 
-            other_parameter_node.type                = PARAMETER;
-            other_parameter_node.range.from          = other_parameter_start;
-            other_parameter_node.range.to            = other_parameter_end;
-            other_parameter_node.parameter_node.type = other_parameter_type;
-            other_parameter_node.parameter_node.name = other_parameter_name;
+            other_parameter_node.type                 = PARAMETER;
+            other_parameter_node.range.from           = other_parameter_start;
+            other_parameter_node.range.to             = other_parameter_end;
+            other_parameter_node.parameter_node.type  = other_parameter_type;
+            other_parameter_node.parameter_node.name  = other_parameter_name;
+            other_parameter_node.parameter_node.vaarg = other_parameter_vaarg;
 
             parameters.push(other_parameter_node);
         }
@@ -311,11 +343,13 @@ fn Node* parse_factor(Parser* parser, CompileContext* context, Lexer* lexer) {
     Node* node = null;
 
     switch (parser.current.type) {
-    case INT:
+    case TokenType.INT:
         node = parse_int(parser, context, lexer);
-    case TRUE:
-    case FALSE:
+    case TokenType.TRUE:
+    case TokenType.FALSE:
         node = parse_bool(parser, context, lexer);
+    case TokenType.STRING:
+        node = parse_string(parser, context, lexer);
     default:
         highlighter::error(context, parser.current.range.start, parser.current.range.end, "Expression expected, got '%s'", parser.current.type);
     }
@@ -429,6 +463,23 @@ fn Node* parse_bool(Parser* parser, CompileContext* context, Lexer* lexer) {
     node.range.from      = start;
     node.range.to        = end;
     node.bool_node.value = value;
+
+    return node;
+}
+
+fn Node* parse_string(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Node* node  = alloc::new(context.alloc, Node);
+    Range start = parser.current.range.start;
+    Range end   = parser.current.range.end;
+
+    String string = parser.current.value;
+
+    consume(parser, context, lexer, TokenType.STRING);
+
+    node.type               = NodeType.STRING;
+    node.range.from         = start;
+    node.range.to           = end;
+    node.string_node.string = string;
 
     return node;
 }

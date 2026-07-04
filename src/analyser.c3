@@ -2,6 +2,7 @@ module nina::analyser;
 
 import nina::scope;
 import nina::types;
+import nina::lookup;
 import nina::highlighter;
 
 import std::collections::map;
@@ -40,6 +41,8 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
         analyse_call(analyser, context, node);
     case NodeType.BOOL:
         break;
+    case NodeType.STRING:
+        break;
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -77,7 +80,8 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
 
     scope::add_function(analyser.scope, context.alloc, name, analyser.module_name, context.current_file, node);
 
-    // TODO: check if there is a return statement present for each possible outcome
+    @todo("check if there is a return statement present for each possible outcome");
+    
     Node*  type  = node.function_node.type;
     analyser.scope = scope::create(context.alloc, analyser.scope);
 
@@ -120,7 +124,7 @@ fn void analyse_type(Analyser* analyser, CompileContext* context, Node* node) {
 fn void analyse_ret(Analyser* analyser, CompileContext* context, Node* node, void* data) {
     Node* function_type = (Node*)data;
 
-    // TODO: compare return type to function type
+    @todo("compare return type to function type");
 
     if (node.ret_node.value) {
         analyse_node(analyser, context, node.ret_node.value);
@@ -144,7 +148,9 @@ fn void analyse_ext(Analyser* analyser, CompileContext* context, Node* node) {
     parameters.tinit();
 
     foreach (Node* parameter : node.ext_node.parameters) {
-        analyse_node(analyser, context, parameter.parameter_node.type);
+        if (parameter.parameter_node.type) {
+            analyse_node(analyser, context, parameter.parameter_node.type);
+        }
 
         String parameter_name = parameter.parameter_node.name.ident_node.name;
 
@@ -167,8 +173,59 @@ fn void analyse_call(Analyser* analyser, CompileContext* context, Node* node) {
         highlighter::error(context, node.range.from, node.range.to, "Could not find function '%s'", name);
     }
 
-    foreach (Node* argument : node.call_node.arguments) {
+    FunctionInfo* function_info = scope::get_function(analyser.scope, name);
+
+    bool vaarg = false;
+    int  min_parameters_len = (int)function_info.node.function_node.parameters.len();
+    foreach (index, parameter : function_info.node.function_node.parameters)
+    {
+        if (parameter.parameter_node.vaarg)
+        {
+            vaarg              = true;
+            min_parameters_len = (int)index;
+            break;
+        }
+    }
+
+    int arguments_len  = (int)node.call_node.arguments.len();
+    int parameters_len = (int)function_info.node.function_node.parameters.len();
+    
+    if (arguments_len < min_parameters_len) {
+        highlighter::note(context, function_info.node.range.from, function_info.node.range.to, "Definition was here");
+        highlighter::error(context, node.range.from, node.range.to, "Expected more arguments");
+    }
+
+    if (arguments_len > parameters_len)
+    {
+        if (!vaarg)
+        {
+            Node* argument = node.call_node.arguments[(long)arguments_len - 1];
+
+            highlighter::error(context, argument.range.from, argument.range.to, "Expected less arguments");
+        }
+    }
+
+    foreach (int i, Node* argument : node.call_node.arguments)
+    {
+        if (i >= parameters_len) {
+            break;
+        }
+
+        Node* parameter = function_info.node.function_node.parameters[i];
+
         analyse_node(analyser, context, argument);
+
+        if (parameter.parameter_node.vaarg) {
+            continue;
+        }
+
+        if (!lookup::compare_type(context.lookup, context.alloc, parameter, argument))
+        {
+            String parameter_type = lookup::get_type_name(context.lookup, context.alloc, parameter);
+            String argument_type  = lookup::get_type_name(context.lookup, context.alloc, argument);
+
+            highlighter::error(context, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", parameter_type, argument_type);
+        }
     }
 }
 

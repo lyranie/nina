@@ -3,6 +3,7 @@ module nina::lookup;
 import llvm;
 
 import nina::types;
+import nina::highlighter;
 
 import std::io;
 import std::os;
@@ -108,5 +109,89 @@ fn LLVMMetadataRef get_llvm_debug_type_from_kind(Allocator alloc, Generator* gen
     default:
         io::eprintfn("Missing get_llvm_debug_type_from_kind case for type kind '%s'", llvm::get_type_kind(llvm_type));
         os::exit(1);
+    }
+}
+
+fn bool compare_type(Lookup* lookup, Allocator alloc, Node* node, Node* other) {
+    String node_type  = get_type_name(lookup, alloc, node);
+    String other_type = get_type_name(lookup, alloc, other);
+
+    String node_base_group  = get_base_type_group(lookup, alloc, node);
+    String other_base_group = get_base_type_group(lookup, alloc, other);
+
+    if (node_base_group == other_base_group) {
+        return true;
+    }
+
+    if (node_type == other_type) {
+        return true;
+    }
+
+    if (node_type == "any") {
+        return true;
+    }
+
+    return false;
+}
+
+fn String get_type_name(Lookup* lookup, Allocator alloc, Node* node) {
+    switch (node.type) {
+    case NodeType.PARAMETER:
+        if (node.parameter_node.type) {
+            return get_type_name(lookup, alloc, node.parameter_node.type);
+        }
+
+        return "any";
+    case NodeType.TYPE:
+        String type_name   = node.type_node.name.ident_node.name;
+        String type_suffix = node.type_node.suffix;
+
+        return string::format(alloc, "%s%s", type_name, type_suffix);
+    case NodeType.INT:
+        return "int";
+    case NodeType.BOOL:
+        return "bool";
+    case NodeType.STRING:
+        return "string";
+    default:
+        highlighter::panic("Missing get_type_name case for type '%s'", node.type);
+    }
+}
+
+fn String get_base_type_group(Lookup* lookup, Allocator alloc, Node* node) {
+    switch (node.type) {
+    case NodeType.PARAMETER:
+        if (node.parameter_node.type) {
+            return get_base_type_group(lookup, alloc, node.parameter_node.type);
+        }
+
+        return "anytype";
+    case NodeType.TYPE:
+        String       type_name      = node.type_node.name.ident_node.name;
+        LLVMTypeRef  llvm_type      = get_llvm_type(lookup, node);
+        LLVMTypeKind llvm_type_kind = llvm::get_type_kind(llvm_type);
+
+        switch (llvm_type_kind) {
+        case LLVMTypeKind.INTEGER_TYPE_KIND:
+            CUInt width = llvm::get_int_type_width(llvm_type);
+
+            if (width == 1) {
+                return "boolean";
+            }
+        
+            return "integer";
+        case LLVMTypeKind.POINTER_TYPE_KIND:
+            return "pointer";
+        default:
+            highlighter::panic("Missing get_base_type_goup#TYPE case for type kind '%s'", llvm_type_kind);
+        }
+    case NodeType.INT:
+        return "integer";
+    case NodeType.BOOL:
+        return "boolean";
+    case NodeType.STRING:
+        return "pointer";
+    default:
+        highlighter::panic("Missing get_base_type_group case for type '%s'", node.type);
     }
 }

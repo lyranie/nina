@@ -64,8 +64,8 @@ fn void tokenize(Lexer* lexer, CompileContext* context) {
             word(lexer, context);
         } else if (lexer.current.is_digit()) {
             number(lexer, context);
-        } else if (false) {
-            // strings
+        } else if (lexer.current == '"') {
+            string(lexer, context);
         } else if (lexer.current == '.' && peek(lexer) == '.' && peek(lexer, 2) == '.') {
             make_token(lexer, TokenType.ELLIPSE, "...");
         } else if (lexer.current == '|' && peek(lexer) == '|') {
@@ -223,7 +223,7 @@ fn void number(Lexer* lexer, CompileContext* context) => @pool() {
         number.append(".");
         consume(lexer, column: true);
 
-        // TODO: error if no number after e.g. `12.`
+        @todo("error if no number after '.' e.g. `12.`");
 
         while (lexer.current.is_digit() || lexer.current == '_') {
             number.append(lexer.current);
@@ -239,6 +239,44 @@ fn void number(Lexer* lexer, CompileContext* context) => @pool() {
         .range = {
             .start = start,
             .end   = lexer.range
+        }
+    });
+}
+
+fn void string(Lexer* lexer, CompileContext* context) => @pool() {
+    Range start = { lexer.range.line, lexer.range.column };
+
+    consume(lexer, column: true);
+
+    DString string;
+    string.tinit();
+
+    while (lexer.current != '"') {
+        if (lexer.current == '\\') {
+            consume(lexer, column: true);
+
+            switch (lexer.current) {
+            case 'n':
+                string.append("\n");
+            }
+
+            consume(lexer, column: true);
+        } else {
+            string.append(lexer.current);
+            consume(lexer, column: true);
+        }
+    }
+
+    consume(lexer, column: true);
+
+    Range end = { lexer.range.line, lexer.range.column };
+    
+    lexer.context.tokens.push({
+        .type  = TokenType.STRING,
+        .value = string.copy_str(context.alloc),
+        .range = {
+            .start = start,
+            .end   = end
         }
     });
 }

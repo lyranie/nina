@@ -18,6 +18,10 @@ fn void add_function(Generator* generator, CompileContext* context, Node* node, 
     debug_types.push(lookup::get_llvm_debug_type(context.alloc, generator, context.lookup, node.function_node.type));
 
     foreach (Node* parameter : node.function_node.parameters) {
+        if (parameter.parameter_node.vaarg) {
+            continue;
+        }
+
         debug_types.push(lookup::get_llvm_debug_type(context.alloc, generator, context.lookup, parameter));
     }
 

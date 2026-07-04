@@ -15,5 +15,5 @@
   },
   "cpu": "generic",
   "opt": "O0",
-  "features": [ "PROFILER" ]
+  "features": [ "DEBUG" ]
 }

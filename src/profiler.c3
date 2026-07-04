@@ -16,7 +16,7 @@ fn Profiler* create(Allocator alloc) {
 }
 
 fn void commit(Profiler* profiler, String name) {
-$if $feature(PROFILER):
+$if $feature(DEBUG):
     Time now = time::now();
 
     if (profiler.stages.len() > 0) {
@@ -30,7 +30,7 @@ $endif
 }
 
 fn void end(Profiler* profiler) {
-$if $feature(PROFILER):
+$if $feature(DEBUG):
     Time now = time::now();
 
     if (profiler.stages.len() > 0) {
