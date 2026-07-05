@@ -48,7 +48,6 @@ fn void error(CompileContext* context, Range from, Range to, String message, arg
 
     io::eprintn();
     io::eprintfn("in file (%s %d:%d)", context.current_file, from.line, from.column);
-    io::eprintn(Ansi.RESET);
 
     os::exit(1);
 }
@@ -95,7 +94,6 @@ fn void note(CompileContext* context, Range from, Range to, String message, args
 
     io::eprintn();
     io::eprintfn("in file (%s %d:%d)", context.current_file, from.line, from.column);
-    io::eprintn(Ansi.RESET);
 }
 
 fn void warn() {

@@ -21,44 +21,49 @@ fn Generator* create(CompileContext* context, Parser* parser) {
     generator.scope              = scope::create(context.alloc);
     generator.llvm_module        = llvm::module_create_with_name((CChar*)mod.ptr);
 
-    String flag_name = "Debug Info Version";
-    llvm::add_module_flag(
-        generator.llvm_module,
-        LLVMModuleFlagBehavior.MODULE_FLAG_BEHAVIOR_WARNING,
-        (CChar*)flag_name.ptr,
-        flag_name.len,
-        llvm::value_as_metadata(llvm::const_int(llvm::int_32_type(), llvm::debug_metadata_version(), llvm::FALSE))
-    );
+    if (!context.args.no_debug) {
+        String flag_name = "Debug Info Version";
+        llvm::add_module_flag(
+            generator.llvm_module,
+            LLVMModuleFlagBehavior.MODULE_FLAG_BEHAVIOR_WARNING,
+            (CChar*)flag_name.ptr,
+            flag_name.len,
+            llvm::value_as_metadata(llvm::const_int(llvm::int_32_type(), llvm::debug_metadata_version(), llvm::FALSE))
+        );
+    }
+
+    generator.llvm_builder       = llvm::create_builder();
 
     String file = context.current_file.to_path(context.alloc).basename().copy(context.alloc)!!;
     String path = context.current_file.trim_right(file);
 
-    generator.llvm_builder       = llvm::create_builder();
-    generator.llvm_debug_builder = llvm::create_di_builder(generator.llvm_module);
-    generator.llvm_debug_file    = llvm::di_builder_create_file(
-        generator.llvm_debug_builder,
-        (CChar*)file.ptr,
-        (CUInt)file.len,
-        (CChar*)path.ptr,
-        (CUInt)path.len
-    );
+    if (!context.args.no_debug) {
+        generator.llvm_debug_builder = llvm::create_di_builder(generator.llvm_module);
+        generator.llvm_debug_file    = llvm::di_builder_create_file(
+            generator.llvm_debug_builder,
+            (CChar*)file.ptr,
+            (CUInt)file.len,
+            (CChar*)path.ptr,
+            (CUInt)path.len
+        );
 
-    llvm::di_builder_create_compile_unit(
-        generator.llvm_debug_builder,
-        LLVMDWARFSourceLanguage.DWARF_SOURCE_LANGUAGE_C99,
-        generator.llvm_debug_file,
-        "nina", 4,
-        llvm::FALSE,
-        "", 0,
-        0,
-        "", 0,
-        LLVMDWARFEmissionKind.DWARF_EMISSION_FULL,
-        0,
-        llvm::FALSE,
-        llvm::FALSE,
-        "", 0,
-        "", 0
-    );
+        llvm::di_builder_create_compile_unit(
+            generator.llvm_debug_builder,
+            LLVMDWARFSourceLanguage.DWARF_SOURCE_LANGUAGE_C99,
+            generator.llvm_debug_file,
+            "nina", 4,
+            llvm::FALSE,
+            "", 0,
+            0,
+            "", 0,
+            LLVMDWARFEmissionKind.DWARF_EMISSION_FULL,
+            0,
+            llvm::FALSE,
+            llvm::FALSE,
+            "", 0,
+            "", 0
+        );
+    }
 
     return generator;
 }
@@ -86,6 +91,8 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
         return generate_bool(generator, context, node);
     case NodeType.STRING:
         return generate_string(generator, context, node);
+    case NodeType.BIN:
+        return generate_bin(generator, context, node);
     default:
         highlighter::panic("Missing generator function for type '%s'", node.type);
     }
@@ -152,7 +159,7 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
 fn void generate_ret(Generator* generator, CompileContext* context, Node* node, void* data) {
     Node* value = node.ret_node.value;
 
-    debug::set_location(generator, node.range.from.line, node.range.from.column);
+    debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
     if (value) {
         llvm::build_ret(generator.llvm_builder, generate_node(generator, context, value, data));
@@ -164,7 +171,7 @@ fn void generate_ret(Generator* generator, CompileContext* context, Node* node, 
 fn LLVMValueRef generate_int(Generator* generator, CompileContext* context, Node* node, void* data) {
     LLVMTypeRef int_type = context.lookup.get("int").llvm_type!!;
 
-    debug::set_location(generator, node.range.from.line, node.range.from.column);
+    debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
     if (data) {
         Node* parameter_type = data;
@@ -215,7 +222,7 @@ fn LLVMValueRef generate_call(Generator* generator, CompileContext* context, Nod
     String        name          = node.call_node.name.path_node.path;
     FunctionInfo* function_info = scope::get_function(generator.scope, name);
 
-    debug::set_location(generator, node.range.from.line, node.range.from.column);
+    debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
     List{LLVMValueRef} arguments;
     arguments.init(context.alloc);
@@ -262,7 +269,7 @@ fn LLVMValueRef generate_bool(Generator* generator, CompileContext* context, Nod
     LLVMTypeRef bool_type = context.lookup.get("bool").llvm_type!!;
     CULongLong  value     = node.bool_node.value == "true" ? 1 : 0;
 
-    debug::set_location(generator, node.range.from.line, node.range.from.column);
+    debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
     return llvm::const_int(bool_type, value, llvm::FALSE);
 }
@@ -276,8 +283,22 @@ fn LLVMValueRef generate_string(Generator* generator, CompileContext* context, N
     return global;
 }
 
+fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node* node) {
+    LLVMValueRef left  = generate_node(generator, context, node.bin_node.left);
+    LLVMValueRef right = generate_node(generator, context, node.bin_node.right);
+
+    switch (node.bin_node.operator.type) {
+    case TokenType.PLUS:
+        return llvm::build_add(generator.llvm_builder, left, right, "");
+    default:
+        highlighter::panic("Missing generate_bin case for operator type '%s'", node.bin_node.operator.type);
+    }
+}
+
 fn void emit(Generator* generator, CompileContext* context) {
-    llvm::di_builder_finalize(generator.llvm_debug_builder);
+    if (!context.args.no_debug) {
+        llvm::di_builder_finalize(generator.llvm_debug_builder);
+    }
 
     CChar*        target_triple = llvm::get_default_target_triple();
     LLVMTargetRef target;

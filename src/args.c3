@@ -55,6 +55,10 @@ fn void parse(Args* args, String[] argv) {
             args.emit_ir = true;
         case "--no-libc":
             args.no_libc = true;
+        case "--no-debug":
+            args.no_debug = true;
+        case "--no-link":
+            args.no_linker = true;
         }
     }
 }

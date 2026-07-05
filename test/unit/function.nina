@@ -1,0 +1,11 @@
+mod test.function;
+
+int test() {
+    ret 0;
+}
+
+/*
+define i32 @test() {
+entry:
+  ret i32 0
+}

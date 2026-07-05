@@ -266,10 +266,10 @@ fn Node* parse_expr(Parser* parser, CompileContext* context, Lexer* lexer) {
 
         Node* right = parse_term(parser, context, lexer);
         
-        node = @make_node(context, NodeType.BIN, left.range.from, right.range.to; unused) {
-            node.bin_node.operator = operator;
-            node.bin_node.left     = left;
-            node.bin_node.right    = right;
+        node = @make_node(context, NodeType.BIN, left.range.from, right.range.to; _node) {
+            _node.bin_node.operator = operator;
+            _node.bin_node.left     = left;
+            _node.bin_node.right    = right;
         };
     }
 
@@ -292,10 +292,10 @@ fn Node* parse_term(Parser* parser, CompileContext* context, Lexer* lexer) {
 
         Node* right = parse_factor(parser, context, lexer);
         
-        node = @make_node(context, NodeType.BIN, left.range.from, right.range.to; unused) {
-            node.bin_node.operator = operator;
-            node.bin_node.left     = left;
-            node.bin_node.right    = right;
+        node = @make_node(context, NodeType.BIN, left.range.from, right.range.to; _node) {
+            _node.bin_node.operator = operator;
+            _node.bin_node.left     = left;
+            _node.bin_node.right    = right;
         };
     }
 

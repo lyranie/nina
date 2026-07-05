@@ -1,0 +1,6 @@
+mod test.extern;
+
+ext int printf(char* fmt, args...);
+
+/*
+declare i32 @printf(ptr, ...)

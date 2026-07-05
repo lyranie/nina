@@ -9,6 +9,10 @@ import std::collections::list;
 import std::io;
 
 fn void add_function(Generator* generator, CompileContext* context, Node* node, LLVMValueRef llvm_function_value) {
+    if (context.args.no_debug) {
+        return;
+    }
+
     String name = node.function_node.name.ident_node.name;
     CUInt  line = (CUInt)node.range.from.line;
 
@@ -56,6 +60,10 @@ fn void add_function(Generator* generator, CompileContext* context, Node* node, 
 }
 
 fn LLVMValueRef add_parameter(Generator* generator, CompileContext* context, Node* parameter, LLVMValueRef llvm_function_value, LLVMValueRef llvm_parameter_value, CUInt index) {
+    if (context.args.no_debug) {
+        return null;
+    }
+
     String          parameter_name  = parameter.parameter_node.name.ident_node.name;
     LLVMMetadataRef llvm_subprogram = llvm::get_subprogram(llvm_function_value);
     LLVMMetadataRef llvm_debug_type = lookup::get_llvm_debug_type(context.alloc, generator, context.lookup, parameter);
@@ -98,7 +106,11 @@ fn LLVMValueRef add_parameter(Generator* generator, CompileContext* context, Nod
     return llvm_alloca;
 }
 
-fn void set_location(Generator* generator, int line, int column) {
+fn void set_location(Generator* generator, CompileContext* context, int line, int column) {
+    if (context.args.no_debug) {
+        return;
+    }
+
     LLVMValueRef    llvm_function_value = llvm::get_basic_block_parent(llvm::get_insert_block(generator.llvm_builder));
     LLVMMetadataRef llvm_subprogram     = llvm::get_subprogram(llvm_function_value);
     LLVMMetadataRef llvm_debug_location = llvm::di_builder_create_debug_location(

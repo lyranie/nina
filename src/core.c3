@@ -36,7 +36,6 @@ fn CompileContext* context_create() {
 
 fn void context_free(CompileContext* context) {
     alloc_free();
-    profiler::end(context.profiler);
 }
 
 fn bool range_compare(Range range, Range other) {

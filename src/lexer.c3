@@ -7,13 +7,15 @@ import nina::highlighter;
 import std::io;
 import std::os;
 
-fn Lexer* create(Allocator alloc, String file) {
-    Lexer* lexer = alloc::new(alloc, Lexer);
+fn Lexer* create(CompileContext* context, String file) {
+    context.current_file = file;
 
-    char[]? content = file::load(alloc, file);
+    Lexer* lexer = alloc::new(context.alloc, Lexer);
+
+    char[]? content = file::load(context.alloc, file);
     if (catch err = content) {
         io::eprintfn("Failed to create lexer: %s", err);
-        alloc::free(alloc, lexer);
+        alloc::free(context.alloc, lexer);
 
         return null;
     }
@@ -32,7 +34,7 @@ fn Lexer* create(Allocator alloc, String file) {
     lexer.cursor   = 0;
     lexer.range    = { .line = 1, .column = 0 };
     
-    lexer.context.tokens.init(alloc);
+    lexer.context.tokens.init(context.alloc);
 
     return lexer;
 }

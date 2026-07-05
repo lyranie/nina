@@ -1,0 +1,11 @@
+mod test.bin;
+
+int test() {
+    ret 1 + 1;
+}
+
+/*
+define i32 @test() {
+entry:
+  ret i32 2
+}

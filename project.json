@@ -1,19 +1,23 @@
 {
-  "langrev": "1",
-  "warnings":  [ "no-unused" ],
-  "dependency-search-paths":  [ "lib" ],
-  "dependencies":  [ "llvm" ],
-  "authors":  [ "lyranie <lyranie.dev@gmail.com>" ],
-  "version": "0.1.0",
-  "sources":  [ "src/**" ],
-  "build-dir": "build",
-  "output": "build",
-  "targets": {
-    "nina-linux-x86_64": {
-      "type": "executable"
-    }
-  },
-  "cpu": "generic",
-  "opt": "O0",
-  "features": [ "DEBUG" ]
+    "langrev": "1",
+    "warnings":  [ "no-unused" ],
+    "dependency-search-paths":  [ "lib" ],
+    "dependencies":  [ "llvm" ],
+    "authors":  [ "lyranie <lyranie.dev@gmail.com>" ],
+    "version": "0.1.0",
+    "sources":  [ "src/**" ],
+    "test-sources":  [ "test/**" ],
+    "build-dir": "build",
+    "output": "build",
+    "targets": {
+        "nina": {
+            "type": "executable",
+            "features": [ "DEBUG" ]
+        },
+        "libnina": {
+            "type": "dynamic-lib"
+        }
+    },
+    "cpu": "generic",
+    "opt": "O0"
 }

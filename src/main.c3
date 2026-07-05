@@ -10,6 +10,7 @@ import std::thread;
 fn void main(String[] argv)
 {
     @todo("mark type narrowing as error without explicit cast");
+    @todo("make slices provide the pointer for function calls that require a char*");
 
     CompileContext* context = core::context_create();
 
@@ -29,12 +30,10 @@ fn void main(String[] argv)
             os::exit(1);
         }
 
-        context.current_file = path;
-
         // -- LEXER --
         profiler::commit(context.profiler, "Lexer");
         
-        Lexer* lexer = lexer::create(context.alloc, path);
+        Lexer* lexer = lexer::create(context, path);
         lexer::tokenize(lexer, context);
 
         // -- PARSER --
@@ -65,12 +64,16 @@ fn void main(String[] argv)
 
     profiler::commit(context.profiler, "Linker");
 
-    Linker* linker = linker::create(context);
-
-    linker::link(linker, context);
+    if (!context.args.no_linker) {
+        Linker* linker = linker::create(context);
+        linker::link(linker, context);
+        linker::free(linker);
+    }
 
     profiler::commit(context.profiler, "Cleanup");
 
-    linker::free(linker);
+    // TODO: move? cleanup still happens in context_free
+    profiler::end(context.profiler);
+
     core::context_free(context);
 }

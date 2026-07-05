@@ -43,6 +43,8 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
         break;
     case NodeType.STRING:
         break;
+    case NodeType.BIN:
+        analyse_bin(analyser, context, node);
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -226,6 +228,15 @@ fn void analyse_call(Analyser* analyser, CompileContext* context, Node* node) {
 
             highlighter::error(context, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", parameter_type, argument_type);
         }
+    }
+}
+
+fn void analyse_bin(Analyser* analyser, CompileContext* context, Node* node) {
+    if (!lookup::compare_type(context.lookup, context.alloc, node.bin_node.left, node.bin_node.right)) {
+        String left_type  = lookup::get_type_name(context.lookup, context.alloc, node.bin_node.left);
+        String right_type = lookup::get_type_name(context.lookup, context.alloc, node.bin_node.right);
+
+        highlighter::error(context, node.range.from, node.range.to, "Cannot operate type '%s' with type '%s'", left_type, right_type);
     }
 }
 

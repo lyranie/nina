@@ -1,0 +1,23 @@
+mod test.call;
+
+int other() {
+    ret 0;
+}
+
+int test() {
+    other();
+
+    ret 0;
+}
+
+/*
+define i32 @other() {
+entry:
+  ret i32 0
+}
+
+define i32 @test() {
+entry:
+  %0 = call i32 @other()
+  ret i32 0
+}

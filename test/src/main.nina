@@ -5,5 +5,5 @@ ext int printf(char* fmt, args...);
 int main(int argc, char** argv) {
     printf("Hello, %s!\n", "World");
 
-    ret 0;
+    ret 0 + 1;
 }

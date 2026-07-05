@@ -19,6 +19,8 @@ struct Args {
     StringList     files;
     bool           emit_ir;
     bool           no_libc;
+    bool           no_debug;
+    bool           no_linker;
     String         output;
 }
 
