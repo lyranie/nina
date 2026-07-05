@@ -1,0 +1,72 @@
+mod
+    -> "mod" path statement*;
+    ;
+
+path
+    -> IDENT ("." IDENT)*
+    ;
+
+statement
+    -> function
+    | ext
+    ;
+
+function
+    -> type IDENT parameters compound
+    ;
+
+type
+    -> IDENT ("*" | "[]")*
+    ;
+
+parameters
+    -> "(" (parameter ("," parameter)*)? ")"
+    ;
+
+parameter
+    -> type IDENT
+    |  IDENT "..."
+    ;
+
+compound
+    -> "{" compound_statement "}"
+    ;
+
+compound_statement
+    -> ret
+    |  identifier_statement
+    ;
+
+ret
+    -> "ret" expr? ";"
+    ;
+
+expr
+    -> term (("+" | "-" | "&&" | "||") term)*
+    ;
+
+term
+    -> factor (("*" | "/" | "==" | "!=") factor)*
+    ;
+
+factor
+    -> INT
+    |  BOOL
+    |  STRING
+    ;
+
+ext
+    -> "ext" type IDENT parameters ";"
+    ;
+
+identifier_statement
+    -> call ";"
+    ;
+
+call
+    -> path arguments
+    ;
+
+arguments
+    -> "(" (expr ("," expr)*)? ")"
+    ;
