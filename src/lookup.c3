@@ -3,6 +3,7 @@ module nina::lookup;
 import llvm;
 
 import nina::types;
+import nina::scope;
 import nina::highlighter;
 
 import std::io;
@@ -17,6 +18,7 @@ fn Lookup* create(Allocator alloc) {
     register_type(lookup, alloc, "bool",   "<builtin>", null, llvm::int_1_type());
     register_type(lookup, alloc, "char",   "<builtin>", null, llvm::int_8_type());
     register_type(lookup, alloc, "long",   "<builtin>", null, llvm::int_64_type());
+    register_type(lookup, alloc, "void",   "<builtin>", null, llvm::void_type());
     register_type(lookup, alloc, "String", "<builtin>", null, llvm::slice_type(llvm::int_8_type()));
 
     return lookup;
@@ -55,6 +57,8 @@ fn LLVMTypeRef get_llvm_type(Lookup* lookup, Node* node) {
         return llvm_type;
     case NodeType.PARAMETER:
         return get_llvm_type(lookup, node.parameter_node.type);
+    case NodeType.VARIABLE:
+        return get_llvm_type(lookup, node.variable_node.type);
     default:
         io::eprintfn("Missing get_llvm_type case for type '%s'", node.type);
         os::exit(1);
@@ -112,12 +116,12 @@ fn LLVMMetadataRef get_llvm_debug_type_from_kind(Allocator alloc, Generator* gen
     }
 }
 
-fn bool compare_type(Lookup* lookup, Allocator alloc, Node* node, Node* other) {
-    String node_type  = get_type_name(lookup, alloc, node);
-    String other_type = get_type_name(lookup, alloc, other);
+fn bool compare_type(Lookup* lookup, Allocator alloc, Node* node, Node* other, Scope* scope) {
+    String node_type  = get_type_name(lookup, alloc, node, scope);
+    String other_type = get_type_name(lookup, alloc, other, scope);
 
-    String node_base_group  = get_base_type_group(lookup, alloc, node);
-    String other_base_group = get_base_type_group(lookup, alloc, other);
+    String node_base_group  = get_base_type_group(lookup, alloc, node, scope);
+    String other_base_group = get_base_type_group(lookup, alloc, other, scope);
 
     if (node_base_group == other_base_group) {
         return true;
@@ -134,11 +138,11 @@ fn bool compare_type(Lookup* lookup, Allocator alloc, Node* node, Node* other) {
     return false;
 }
 
-fn String get_type_name(Lookup* lookup, Allocator alloc, Node* node) {
+fn String get_type_name(Lookup* lookup, Allocator alloc, Node* node, Scope* scope) {
     switch (node.type) {
     case NodeType.PARAMETER:
         if (node.parameter_node.type) {
-            return get_type_name(lookup, alloc, node.parameter_node.type);
+            return get_type_name(lookup, alloc, node.parameter_node.type, scope);
         }
 
         return "any";
@@ -153,16 +157,22 @@ fn String get_type_name(Lookup* lookup, Allocator alloc, Node* node) {
         return "bool";
     case NodeType.STRING:
         return "string";
+    case NodeType.IDENT:
+        String name = node.ident_node.name;
+
+        return get_type_name(lookup, alloc, scope::get_variable(scope, name).node, scope);
+    case NodeType.VARIABLE:
+        return get_type_name(lookup, alloc, node.variable_node.type, scope);
     default:
         highlighter::panic("Missing get_type_name case for type '%s'", node.type);
     }
 }
 
-fn String get_base_type_group(Lookup* lookup, Allocator alloc, Node* node) {
+fn String get_base_type_group(Lookup* lookup, Allocator alloc, Node* node, Scope* scope) {
     switch (node.type) {
     case NodeType.PARAMETER:
         if (node.parameter_node.type) {
-            return get_base_type_group(lookup, alloc, node.parameter_node.type);
+            return get_base_type_group(lookup, alloc, node.parameter_node.type, scope);
         }
 
         return "anytype";
@@ -191,6 +201,12 @@ fn String get_base_type_group(Lookup* lookup, Allocator alloc, Node* node) {
         return "boolean";
     case NodeType.STRING:
         return "pointer";
+    case NodeType.IDENT:
+        String name = node.ident_node.name;
+
+        return get_base_type_group(lookup, alloc, scope::get_variable(scope, name).node, scope);
+    case NodeType.VARIABLE:
+        return get_base_type_group(lookup, alloc, node.variable_node.type, scope);
     default:
         highlighter::panic("Missing get_base_type_group case for type '%s'", node.type);
     }

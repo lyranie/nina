@@ -2,6 +2,11 @@
 
 all: compiler lib copy-lib
 
+debug:
+	c3c build nina -D DEBUG
+	$(MAKE) lib
+	$(MAKE) copy-lib
+
 compiler:
 	c3c build nina
 

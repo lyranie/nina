@@ -313,6 +313,8 @@ fn Node* parse_factor(Parser* parser, CompileContext* context, Lexer* lexer) {
         node = parse_bool(parser, context, lexer);
     case TokenType.STRING:
         node = parse_string(parser, context, lexer);
+    case TokenType.IDENT:
+        node = parse_identifier_expr(parser, context, lexer);
     default:
         highlighter::error(context, parser.current.range.start, parser.current.range.end, "Expression expected, got '%s'", parser.current.type);
     }
@@ -362,7 +364,7 @@ fn Node* parse_identifier_statement(Parser* parser, CompileContext* context, Lex
 
         return node;
     default:
-        highlighter::panic();
+        return parse_variable(parser, context, lexer);
     }
 }
 
@@ -424,6 +426,39 @@ fn Node* parse_string(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     return @make_node(context, NodeType.STRING, start, end; node) {
         node.string_node.string = string;
+    };
+}
+
+fn Node* parse_identifier_expr(Parser* parser, CompileContext* context, Lexer* lexer) {
+    switch (peek(parser, lexer).type) {
+    case TokenType.LPAREN:
+        return parse_call(parser, context, lexer);
+    default:
+        return parse_identifier(parser, context, lexer);
+    }
+}
+
+fn Node* parse_variable(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    Node* type = parse_type(parser, context, lexer);
+    Node* name = parse_identifier(parser, context, lexer);
+
+    Node* value = null;
+    if (parser.current.type == TokenType.EQUALS) {
+        consume(parser, context, lexer, TokenType.EQUALS);
+
+        value = parse_expr(parser, context, lexer);
+    }
+
+    consume(parser, context, lexer, TokenType.SEMI);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.VARIABLE, start, end; node) {
+        node.variable_node.type  = type;
+        node.variable_node.name  = name;
+        node.variable_node.value = value;
     };
 }
 

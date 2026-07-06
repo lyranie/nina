@@ -1,0 +1,17 @@
+mod test.string;
+
+void test() {
+    char* test  = "Test";
+    ret;
+}
+
+/*
+@0 = private unnamed_addr constant [5 x i8] c"Test\00"
+@1 = constant { ptr, i32 } { ptr @0, i32 4 }
+
+define void @test() {
+entry:
+  %test = alloca ptr, align 8
+  store ptr @0, ptr %test, align 8
+  ret void
+}

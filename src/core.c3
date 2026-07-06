@@ -66,7 +66,9 @@ fn void node_free(Node* node, Allocator alloc) {
 
         node_free(node.parameter_node.name, alloc);
     case NodeType.RET:
-        node_free(node.ret_node.value, alloc);
+        if (node.ret_node.value) {
+            node_free(node.ret_node.value, alloc);
+        }
     case NodeType.FUNCTION:
         node_free(node.function_node.type, alloc);
         node_free(node.function_node.name, alloc);
@@ -100,6 +102,13 @@ fn void node_free(Node* node, Allocator alloc) {
         break;
     case NodeType.STRING:
         alloc::free(alloc, node.string_node.string);
+    case NodeType.VARIABLE:
+        node_free(node.variable_node.type, alloc);
+        node_free(node.variable_node.name, alloc);
+
+        if (node.variable_node.value) {
+            node_free(node.variable_node.value, alloc);
+        }
     default:
         io::eprintfn("Missing node_free call for type %s", node.type);
         os::exit(1);

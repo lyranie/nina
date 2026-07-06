@@ -185,6 +185,11 @@ struct Node {
         struct string_node {
             String string;
         }
+        struct variable_node {
+            Node* type;
+            Node* name;
+            Node* value;
+        }
     }
 }
 
@@ -202,6 +207,7 @@ enum NodeType {
     CALL,
     BOOL,
     STRING,
+    VARIABLE,
 }
 
 struct Analyser {

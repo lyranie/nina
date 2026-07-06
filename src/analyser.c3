@@ -45,6 +45,10 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
         break;
     case NodeType.BIN:
         analyse_bin(analyser, context, node);
+    case NodeType.IDENT:
+        analyse_ident(analyser, context, node);
+    case NodeType.VARIABLE:
+        analyse_variable(analyser, context, node);
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -221,10 +225,10 @@ fn void analyse_call(Analyser* analyser, CompileContext* context, Node* node) {
             continue;
         }
 
-        if (!lookup::compare_type(context.lookup, context.alloc, parameter, argument))
+        if (!lookup::compare_type(context.lookup, context.alloc, parameter, argument, analyser.scope))
         {
-            String parameter_type = lookup::get_type_name(context.lookup, context.alloc, parameter);
-            String argument_type  = lookup::get_type_name(context.lookup, context.alloc, argument);
+            String parameter_type = lookup::get_type_name(context.lookup, context.alloc, parameter, analyser.scope);
+            String argument_type  = lookup::get_type_name(context.lookup, context.alloc, argument, analyser.scope);
 
             highlighter::error(context, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", parameter_type, argument_type);
         }
@@ -232,11 +236,42 @@ fn void analyse_call(Analyser* analyser, CompileContext* context, Node* node) {
 }
 
 fn void analyse_bin(Analyser* analyser, CompileContext* context, Node* node) {
-    if (!lookup::compare_type(context.lookup, context.alloc, node.bin_node.left, node.bin_node.right)) {
-        String left_type  = lookup::get_type_name(context.lookup, context.alloc, node.bin_node.left);
-        String right_type = lookup::get_type_name(context.lookup, context.alloc, node.bin_node.right);
+    @todo("check if operator is applicable to type");
+
+    if (!lookup::compare_type(context.lookup, context.alloc, node.bin_node.left, node.bin_node.right, analyser.scope)) {
+        String left_type  = lookup::get_type_name(context.lookup, context.alloc, node.bin_node.left, analyser.scope);
+        String right_type = lookup::get_type_name(context.lookup, context.alloc, node.bin_node.right, analyser.scope);
 
         highlighter::error(context, node.range.from, node.range.to, "Cannot operate type '%s' with type '%s'", left_type, right_type);
+    }
+}
+
+fn void analyse_ident(Analyser* analyser, CompileContext* context, Node* node) {
+    String name = node.ident_node.name;
+
+    if (!scope::has_variable(analyser.scope, name)) {
+        highlighter::error(context, node.range.from, node.range.to, "Could not find variable '%s'", name);
+    }
+}
+
+fn void analyse_variable(Analyser* analyser, CompileContext* context, Node* node) {
+    analyse_node(analyser, context, node.variable_node.type);
+
+    String name = node.variable_node.name.ident_node.name;
+
+    if (scope::has_variable(analyser.scope, name)) {
+        VariableInfo* prev = scope::get_variable(analyser.scope, name);
+        
+        highlighter::note(context, prev.node.range.from, prev.node.range.to, "Previous definition was here");
+        highlighter::error(context, node.range.from, node.range.to, "Variable '%s' already defined", name);
+    }
+
+    scope::add_variable(analyser.scope, context.alloc, name, node);
+
+    if (node.variable_node.type) {
+        analyse_node(analyser, context, node.variable_node.type);
+
+        @todo("check if value type matches variable type");
     }
 }
 

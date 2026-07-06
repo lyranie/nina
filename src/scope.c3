@@ -14,6 +14,8 @@ fn Scope* create(Allocator alloc, Scope* parent = null) {
     return scope;
 }
 
+// -- VARIABLE --
+
 fn void add_variable(Scope* scope, Allocator alloc, String name, Node* node, LLVMTypeRef llvm_type = null, LLVMValueRef llvm_value = null) {
     VariableInfo* variable = alloc::new(alloc, VariableInfo);
 
@@ -24,6 +26,32 @@ fn void add_variable(Scope* scope, Allocator alloc, String name, Node* node, LLV
 
     scope.variables.set(name, variable);
 }
+
+fn bool has_variable(Scope* scope, String name) {
+    if (scope.variables.has_key(name)) {
+        return true;
+    }
+
+    if (scope.parent) {
+        return has_variable(scope.parent, name);
+    }
+
+    return false;
+}
+
+fn VariableInfo* get_variable(Scope* scope, String name) {
+    if (scope.variables.has_key(name)) {
+        return scope.variables.get(name)!!;
+    }
+
+    if (scope.parent) {
+        return get_variable(scope.parent, name);
+    }
+
+    return null;
+}
+
+// -- FUNCTION --
 
 fn FunctionInfo* add_function(Scope* scope, Allocator alloc, String name, String mod, String file, Node* node, LLVMTypeRef llvm_type = null, LLVMValueRef llvm_value = null) {
     FunctionInfo* function = alloc::new(alloc, FunctionInfo);

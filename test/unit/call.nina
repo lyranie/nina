@@ -1,23 +1,22 @@
 mod test.call;
 
-int other() {
-    ret 0;
+void other() {
+    ret;
 }
 
-int test() {
+void test() {
     other();
-
-    ret 0;
+    ret;
 }
 
 /*
-define i32 @other() {
+define void @other() {
 entry:
-  ret i32 0
+  ret void
 }
 
-define i32 @test() {
+define void @test() {
 entry:
-  %0 = call i32 @other()
-  ret i32 0
+  call void @other()
+  ret void
 }

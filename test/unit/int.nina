@@ -1,7 +1,7 @@
-mod test.bin;
+mod test.integer;
 
 void test() {
-    int test = 1 + 1;
+    int test = 0;
     ret;
 }
 
@@ -9,6 +9,6 @@ void test() {
 define void @test() {
 entry:
   %test = alloca i32, align 4
-  store i32 2, ptr %test, align 4
+  store i32 0, ptr %test, align 4
   ret void
 }

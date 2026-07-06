@@ -1,11 +1,11 @@
 mod test.function;
 
-int test() {
-    ret 0;
+void test() {
+    ret;
 }
 
 /*
-define i32 @test() {
+define void @test() {
 entry:
-  ret i32 0
+  ret void
 }

@@ -93,6 +93,10 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
         return generate_string(generator, context, node);
     case NodeType.BIN:
         return generate_bin(generator, context, node);
+    case NodeType.IDENT:
+        return generate_ident(generator, context, node, data);
+    case NodeType.VARIABLE:
+        return generate_variable(generator, context, node);
     default:
         highlighter::panic("Missing generator function for type '%s'", node.type);
     }
@@ -145,7 +149,10 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
         LLVMTypeRef  llvm_parameter_type  = lookup::get_llvm_type(context.lookup, parameter);
         LLVMValueRef llvm_parameter_value = llvm::get_param(function_info.llvm_value, index);
 
-        scope::add_variable(generator.scope, context.alloc, parameter_name, parameter, llvm_parameter_type, llvm_parameter_value);
+        LLVMValueRef alloca = llvm::build_alloca(generator.llvm_builder, llvm_parameter_type, "");
+        llvm::build_store(generator.llvm_builder, llvm_parameter_value, alloca);
+
+        scope::add_variable(generator.scope, context.alloc, parameter_name, parameter, llvm_parameter_type, alloca);
         debug::add_parameter(generator, context, parameter, llvm_function_value, llvm_parameter_value, index);
     }
 
@@ -275,12 +282,27 @@ fn LLVMValueRef generate_bool(Generator* generator, CompileContext* context, Nod
 }
 
 fn LLVMValueRef generate_string(Generator* generator, CompileContext* context, Node* node) {
-    LLVMValueRef string = llvm::const_string((CChar*)node.string_node.string.ptr, node.string_node.string.len, llvm::FALSE);
-    LLVMTypeRef  type   = context.lookup.get("String").llvm_type!!;
-    LLVMValueRef global = llvm::add_global(generator.llvm_module, type, "");
-    llvm::set_initializer(global, string);
+    LLVMValueRef bytes_const  = llvm::const_string((CChar*)node.string_node.string.ptr, node.string_node.string.len, llvm::FALSE);
+    LLVMTypeRef  bytes_type   = llvm::type_of(bytes_const);
+    LLVMValueRef bytes_global = llvm::add_global(generator.llvm_module, bytes_type, "");
 
-    return global;
+    llvm::set_initializer(bytes_global, bytes_const);
+    llvm::set_global_constant(bytes_global, llvm::TRUE);
+    llvm::set_linkage(bytes_global, LLVMLinkage.PRIVATE_LINKAGE);
+    llvm::set_unnamed_addr(bytes_global, llvm::TRUE);
+
+    LLVMTypeRef  string_type         = context.lookup.get("String").llvm_type!!;
+    LLVMValueRef len_const           = llvm::const_int(llvm::int_32_type(), node.string_node.string.len, llvm::FALSE);
+    LLVMValueRef[2] fields           = { bytes_global, len_const };
+    LLVMValueRef string_struct_const = llvm::const_named_struct(string_type, &fields, 2);
+
+    LLVMValueRef global = llvm::add_global(generator.llvm_module, string_type, "");
+    llvm::set_initializer(global, string_struct_const);
+    llvm::set_global_constant(global, llvm::TRUE);
+
+    @todo("revert to returning the String struct once reflection exists for String.ptr");
+    // return global;
+    return bytes_global;
 }
 
 fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node* node) {
@@ -293,6 +315,26 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
     default:
         highlighter::panic("Missing generate_bin case for operator type '%s'", node.bin_node.operator.type);
     }
+}
+
+fn LLVMValueRef generate_ident(Generator* generator, CompileContext* context, Node* node, void* data) {
+    VariableInfo* variable_info = scope::get_variable(generator.scope, node.ident_node.name);
+    return llvm::build_load_2(generator.llvm_builder, variable_info.llvm_type, variable_info.llvm_value, "");
+}
+
+fn LLVMValueRef generate_variable(Generator* generator, CompileContext* context, Node* node) {
+    String       name        = node.variable_node.name.ident_node.name;
+    LLVMTypeRef  llvm_type   = lookup::get_llvm_type(context.lookup, node);
+    LLVMValueRef llvm_alloca = llvm::build_alloca(generator.llvm_builder, llvm_type, (CChar*)name.ptr);
+    
+    if (node.variable_node.value) {
+        LLVMValueRef llvm_value = generate_node(generator, context, node.variable_node.value, node);
+        llvm::build_store(generator.llvm_builder, llvm_value, llvm_alloca);
+    }
+
+    scope::add_variable(generator.scope, context.alloc, name, node, llvm_type, llvm_alloca);
+
+    return llvm_alloca;
 }
 
 fn void emit(Generator* generator, CompileContext* context) {

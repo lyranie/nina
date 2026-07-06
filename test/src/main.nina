@@ -2,8 +2,14 @@ mod test.main;
 
 ext int printf(char* fmt, args...);
 
-int main(int argc, char** argv) {
-    printf("Hello, %s!\n", "World");
+void greet(char* name) {
+    printf("Hello, %s\n", name);
 
-    ret 0 + 1;
+    ret;
+}
+
+int main(int argc, char** argv) {
+    greet("Allie");
+
+    ret 0;
 }
