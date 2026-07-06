@@ -2,7 +2,6 @@ mod test.integer;
 
 void test() {
     int test = 0;
-    ret;
 }
 
 /*

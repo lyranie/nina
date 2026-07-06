@@ -2,7 +2,6 @@ mod test.bin;
 
 void test() {
     int test = 1 + 1;
-    ret;
 }
 
 /*

@@ -1,12 +1,10 @@
 mod test.call;
 
 void other() {
-    ret;
 }
 
 void test() {
     other();
-    ret;
 }
 
 /*

@@ -3,7 +3,6 @@ mod test.boolean;
 void test() {
     bool test  = true;
     bool test1 = false;
-    ret;
 }
 
 /*

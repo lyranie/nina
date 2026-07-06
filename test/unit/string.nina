@@ -2,7 +2,6 @@ mod test.string;
 
 void test() {
     char* test  = "Test";
-    ret;
 }
 
 /*
