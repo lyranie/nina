@@ -91,7 +91,7 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
         highlighter::error(context, node.range.from, node.range.to, "Missing return at end of function");
     }
 
-    Node*  type  = node.function_node.type;
+    Node* type = node.function_node.type;
     analyser.scope = scope::create(context.alloc, analyser.scope);
 
     HashMap{String, Node*} parameters;
@@ -113,9 +113,7 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
         scope::add_variable(analyser.scope, context.alloc, parameter_name, parameter);
     }
 
-    foreach (Node* statement : node.function_node.statements) {
-        analyse_node(analyser, context, statement, type);
-    }
+    analyse_compound(analyser, context, node.function_node.statements, type);
 
     analyser.scope = analyser.scope.parent;
 
@@ -275,6 +273,29 @@ fn void analyse_variable(Analyser* analyser, CompileContext* context, Node* node
         analyse_node(analyser, context, node.variable_node.type);
 
         @todo("check if value type matches variable type");
+    }
+}
+
+<*
+  @param type : `The Function return type`
+*>
+fn void analyse_compound(Analyser* analyser, CompileContext* context, NodeList statements, Node* type) {
+    bool returned;
+
+    foreach (int index, Node* statement : statements)
+    {
+        analyse_node(analyser, context, statement, type);
+
+        if (returned)
+        {
+            highlighter::warn(context, statement.range.from, statement.range.to, "Statement will never be executed");
+        }
+
+        if (statement.type == NodeType.RET && index != statements.len() - 1)
+        {
+            returned = true;
+            highlighter::note(context, statement.range.from, statement.range.to, "No statement will be executed after return");
+        }
     }
 }
 

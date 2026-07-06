@@ -10,4 +10,6 @@ int main(int argc, char** argv) {
     greet("Allie");
 
     ret 0;
+
+    greet("");
 }

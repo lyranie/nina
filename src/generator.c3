@@ -156,13 +156,11 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
         debug::add_parameter(generator, context, parameter, llvm_function_value, llvm_parameter_value, index);
     }
 
-    foreach (Node* statement : node.function_node.statements) {
-        generate_node(generator, context, statement, type);
-    }
+    bool returned = generate_compound(generator, context, node.function_node.statements, type);
 
     generator.scope = generator.scope.parent;
 
-    if (lookup::get_type_name(context.lookup, context.alloc, node, generator.scope) == "void")
+    if (!returned && lookup::get_type_name(context.lookup, context.alloc, node, generator.scope) == "void")
     {
         llvm::build_ret_void(generator.llvm_builder);
     }
@@ -350,6 +348,27 @@ fn LLVMValueRef generate_variable(Generator* generator, CompileContext* context,
     scope::add_variable(generator.scope, context.alloc, name, node, llvm_type, llvm_alloca);
 
     return llvm_alloca;
+}
+
+fn bool generate_compound(Generator* generator, CompileContext* context, NodeList statements, void* data)
+{
+    bool returned;
+
+    foreach (int index, Node* statement : statements)
+    {
+        if (returned) {
+            continue;
+        }
+
+        if (statement.type == NodeType.RET && index != statements.len() - 1)
+        {
+            returned = true;
+        }
+
+        generate_node(generator, context, statement, data);
+    }
+
+    return returned;
 }
 
 fn void emit(Generator* generator, CompileContext* context) {
