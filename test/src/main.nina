@@ -4,8 +4,6 @@ ext int printf(char* fmt, args...);
 
 void greet(char* name) {
     printf("Hello, %s\n", name);
-
-    ret;
 }
 
 int main(int argc, char** argv) {

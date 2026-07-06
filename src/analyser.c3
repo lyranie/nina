@@ -86,8 +86,11 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
 
     scope::add_function(analyser.scope, context.alloc, name, analyser.module_name, context.current_file, node);
 
-    @todo("check if there is a return statement present for each possible outcome");
-    
+    if (!always_returns(analyser, context, node) && lookup::get_type_name(context.lookup, context.alloc, node, analyser.scope) != "void")
+    {
+        highlighter::error(context, node.range.from, node.range.to, "Missing return at end of function");
+    }
+
     Node*  type  = node.function_node.type;
     analyser.scope = scope::create(context.alloc, analyser.scope);
 
@@ -273,6 +276,29 @@ fn void analyse_variable(Analyser* analyser, CompileContext* context, Node* node
 
         @todo("check if value type matches variable type");
     }
+}
+
+fn bool always_returns(Analyser* analyser, CompileContext* context, Node* node) {
+    switch (node.type) {
+    case NodeType.RET:
+        return true;
+    case NodeType.FUNCTION:
+        return compound_returns(analyser, context, node.function_node.statements);
+    default:
+        return false;
+    }
+}
+
+fn bool compound_returns(Analyser* analyser, CompileContext* context, NodeList statements)
+{
+    foreach (Node* statement : statements)
+    {
+        if (always_returns(analyser, context, statement)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 fn void free(Analyser* analyser, Allocator alloc) {

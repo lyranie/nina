@@ -161,6 +161,11 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
     }
 
     generator.scope = generator.scope.parent;
+
+    if (lookup::get_type_name(context.lookup, context.alloc, node, generator.scope) == "void")
+    {
+        llvm::build_ret_void(generator.llvm_builder);
+    }
 }
 
 fn void generate_ret(Generator* generator, CompileContext* context, Node* node, void* data) {

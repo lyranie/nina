@@ -163,6 +163,8 @@ fn String get_type_name(Lookup* lookup, Allocator alloc, Node* node, Scope* scop
         return get_type_name(lookup, alloc, scope::get_variable(scope, name).node, scope);
     case NodeType.VARIABLE:
         return get_type_name(lookup, alloc, node.variable_node.type, scope);
+    case NodeType.FUNCTION:
+        return get_type_name(lookup, alloc, node.function_node.type, scope);
     default:
         highlighter::panic("Missing get_type_name case for type '%s'", node.type);
     }
