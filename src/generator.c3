@@ -287,6 +287,8 @@ fn LLVMValueRef generate_bool(Generator* generator, CompileContext* context, Nod
 }
 
 fn LLVMValueRef generate_string(Generator* generator, CompileContext* context, Node* node) {
+    debug::set_location(generator, context, node.range.from.line, node.range.from.column);
+
     LLVMValueRef bytes_const  = llvm::const_string((CChar*)node.string_node.string.ptr, node.string_node.string.len, llvm::FALSE);
     LLVMTypeRef  bytes_type   = llvm::type_of(bytes_const);
     LLVMValueRef bytes_global = llvm::add_global(generator.llvm_module, bytes_type, "");
@@ -314,6 +316,8 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
     LLVMValueRef left  = generate_node(generator, context, node.bin_node.left);
     LLVMValueRef right = generate_node(generator, context, node.bin_node.right);
 
+    debug::set_location(generator, context, node.range.from.line, node.range.from.column);
+
     switch (node.bin_node.operator.type) {
     case TokenType.PLUS:
         return llvm::build_add(generator.llvm_builder, left, right, "");
@@ -324,12 +328,18 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
 
 fn LLVMValueRef generate_ident(Generator* generator, CompileContext* context, Node* node, void* data) {
     VariableInfo* variable_info = scope::get_variable(generator.scope, node.ident_node.name);
+
+    debug::set_location(generator, context, node.range.from.line, node.range.from.column);
+
     return llvm::build_load_2(generator.llvm_builder, variable_info.llvm_type, variable_info.llvm_value, "");
 }
 
 fn LLVMValueRef generate_variable(Generator* generator, CompileContext* context, Node* node) {
     String       name        = node.variable_node.name.ident_node.name;
     LLVMTypeRef  llvm_type   = lookup::get_llvm_type(context.lookup, node);
+
+    debug::set_location(generator, context, node.range.from.line, node.range.from.column);
+
     LLVMValueRef llvm_alloca = llvm::build_alloca(generator.llvm_builder, llvm_type, (CChar*)name.ptr);
     
     if (node.variable_node.value) {
