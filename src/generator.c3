@@ -305,6 +305,20 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
     switch (node.bin_node.operator.type) {
     case TokenType.PLUS:
         return llvm::build_add(generator.llvm_builder, left, right, "");
+    case TokenType.MINUS:
+        if (lookup::get_base_type_group(context.lookup, context.alloc, node.bin_node.left, generator.scope) == "real") {
+            return llvm::build_f_sub(generator.llvm_builder, left, right, "");
+        }
+
+        return llvm::build_sub(generator.llvm_builder, left, right, "");
+    case TokenType.ASTERISK:
+        return llvm::build_mul(generator.llvm_builder, left, right, "");
+    case TokenType.SLASH:
+        if (lookup::get_base_type_group(context.lookup, context.alloc, node.bin_node.left, generator.scope) == "real") {
+            return llvm::build_f_div(generator.llvm_builder, left, right, "");
+        }
+
+        return llvm::build_s_div(generator.llvm_builder, left, right, "");
     default:
         highlighter::panic("Missing generate_bin case for operator type '%s'", node.bin_node.operator.type);
     }

@@ -209,6 +209,12 @@ fn String get_base_type_group(Lookup* lookup, Allocator alloc, Node* node, Scope
         return get_base_type_group(lookup, alloc, scope::get_variable(scope, name).node, scope);
     case NodeType.VARIABLE:
         return get_base_type_group(lookup, alloc, node.variable_node.type, scope);
+    case NodeType.RET:
+        if (node.ret_node.value) {
+            return get_base_type_group(lookup, alloc, node.ret_node.value, scope);
+        }
+
+        return "void";
     default:
         highlighter::panic("Missing get_base_type_group case for type '%s'", node.type);
     }

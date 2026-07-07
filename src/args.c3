@@ -74,6 +74,8 @@ fn void print_help(String program) @noreturn @private {
     io::printfn("  --ir                         Emits the generated IR files for the selected backend.");
     io::printfn("  --no-libc                    Doesn't link against libc and the crt.");
     io::printfn("  --output, -o <file>          Specifies the output filename.");
+    io::printfn("  --no-debug                   Doesn't emit debug symbols.");
+    io::printfn("  --no-link                    Doesn't run the linker setup.");
 
     os::exit(0);
 }

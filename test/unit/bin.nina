@@ -1,7 +1,10 @@
 mod test.bin;
 
 void test() {
-    int test = 1 + 1;
+    int test  = 1 + 1;
+    int test1 = 1 - 1;
+    int test2 = 1 * 1;
+    int test3 = 1 / 1;
 }
 
 /*
@@ -9,5 +12,11 @@ define void @test.bin.test() {
 entry:
   %test = alloca i32, align 4
   store i32 2, ptr %test, align 4
+  %test1 = alloca i32, align 4
+  store i32 0, ptr %test1, align 4
+  %test2 = alloca i32, align 4
+  store i32 1, ptr %test2, align 4
+  %test3 = alloca i32, align 4
+  store i32 1, ptr %test3, align 4
   ret void
 }

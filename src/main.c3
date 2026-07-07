@@ -23,6 +23,8 @@ fn void main(String[] argv)
     profiler::commit(context.profiler, "Args");
     args::parse(context.args, argv);
 
+    @todo("check actual command provided via args");
+
     foreach (String file : context.args.files) {
         String? path = file.to_tpath().absolute(context.alloc).copy(context.alloc);
         if (catch err = path) {
