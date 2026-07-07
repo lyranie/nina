@@ -288,6 +288,8 @@ fn LLVMValueRef generate_string(Generator* generator, CompileContext* context, N
     LLVMValueRef global = llvm::add_global(generator.llvm_module, string_type, "");
     llvm::set_initializer(global, string_struct_const);
     llvm::set_global_constant(global, llvm::TRUE);
+    llvm::set_linkage(global, LLVMLinkage.PRIVATE_LINKAGE);
+    llvm::set_unnamed_addr(global, llvm::TRUE);
 
     @todo("revert to returning the String struct once reflection exists for String.ptr");
     // return global;

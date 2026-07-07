@@ -1,11 +1,8 @@
 mod test.main;
 
 use std.io;
-use libc;
 
 int main(int argc, char** argv) {
-    libc.printf("Hello, World!\n");
-
     char* hello = "Helloooo";
     std.io.printn(hello);
 
