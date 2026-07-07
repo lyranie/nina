@@ -276,8 +276,8 @@ fn void analyse_variable(Analyser* analyser, CompileContext* context, Node* node
 
     scope::add_variable(analyser.scope, context.alloc, name, node);
 
-    if (node.variable_node.type) {
-        analyse_node(analyser, context, node.variable_node.type);
+    if (node.variable_node.value) {
+        analyse_node(analyser, context, node.variable_node.value);
 
         @todo("check if value type matches variable type");
     }

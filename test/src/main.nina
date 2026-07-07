@@ -1,10 +1,14 @@
 mod test.main;
 
 use std.io;
+use libc;
 
 int main(int argc, char** argv) {
     char* hello = "Helloooo";
+    char* test = libc.malloc(8);
+
     std.io.printn(hello);
+    std.io.printn(test);
 
     ret 0;
 }
