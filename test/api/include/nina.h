@@ -27,7 +27,7 @@ void nina_parser_parse(Nina_Context *context, Nina_Parser *parser, Nina_Lexer *l
 void nina_parser_free(Nina_Context *context, Nina_Parser *parser);
 
 // -- ANALYSER --
-Nina_Analyser *nina_analyser_create(Nina_Context *context, Nina_Parser *parser);
+Nina_Analyser *nina_analyser_create(Nina_Context *context, const char *path);
 void nina_analyser_analyse(Nina_Context *context, Nina_Analyser *analyser, Nina_Parser *parser);
 void nina_analyser_free(Nina_Context *context, Nina_Analyser *analyser);
 

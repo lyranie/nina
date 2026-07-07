@@ -1,11 +1,11 @@
-mod test.integer;
+mod test.int;
 
 void test() {
     int test = 0;
 }
 
 /*
-define void @test() {
+define void @test.int.test() {
 entry:
   %test = alloca i32, align 4
   store i32 0, ptr %test, align 4

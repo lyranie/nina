@@ -16,7 +16,9 @@ extern fn Parser* nina_parser_create(CompileContext* context, Lexer* lexer);
 extern fn void nina_parser_parse(CompileContext* context, Parser* parser, Lexer* lexer);
 extern fn void nina_parser_free(CompileContext* context, Parser* parser);
 
-extern fn Analyser* nina_analyser_create(CompileContext* context, Parser* parser);
+extern fn void nina_registry_register(CompileContext* context, Parser* parser);
+
+extern fn Analyser* nina_analyser_create(CompileContext* context, CChar* path);
 extern fn void nina_analyser_analyse(CompileContext* context, Analyser* analyser, Parser* parser);
 extern fn void nina_analyser_free(CompileContext* context, Analyser* analyser);
 
@@ -65,7 +67,9 @@ fn bool run_test(CompileContext* context, String name) {
     Parser* parser = nina_parser_create(context, lexer);
     nina_parser_parse(context, parser, lexer);
 
-    Analyser* analyser = nina_analyser_create(context, parser);
+    nina_registry_register(context, parser);
+
+    Analyser* analyser = nina_analyser_create(context, (CChar*)test_file.ptr);
     nina_analyser_analyse(context, analyser, parser);
 
     Generator* generator = nina_generator_create(context, parser);

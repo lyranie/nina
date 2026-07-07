@@ -5,7 +5,7 @@ void test() {
 }
 
 /*
-define void @test() {
+define void @test.bin.test() {
 entry:
   %test = alloca i32, align 4
   store i32 2, ptr %test, align 4

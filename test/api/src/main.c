@@ -7,6 +7,8 @@ int main(int argc, char **argv) {
 		return 0;
 	}
 
+	// TODO: update to parse multiple files
+
     Nina_Context *context = nina_context_create();
 
     nina_profiler_commit(context, "Lexer");
@@ -21,7 +23,7 @@ int main(int argc, char **argv) {
 
     nina_profiler_commit(context, "Analyser");
 
-    Nina_Analyser *analyser = nina_analyser_create(context, parser);
+    Nina_Analyser *analyser = nina_analyser_create(context, argv[1]);
 	nina_analyser_analyse(context, analyser, parser);
 
     nina_profiler_commit(context, "Generator");

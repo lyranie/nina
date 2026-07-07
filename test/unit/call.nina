@@ -8,13 +8,13 @@ void test() {
 }
 
 /*
-define void @other() {
+define void @test.call.other() {
 entry:
   ret void
 }
 
-define void @test() {
+define void @test.call.test() {
 entry:
-  call void @other()
+  call void @test.call.other()
   ret void
 }

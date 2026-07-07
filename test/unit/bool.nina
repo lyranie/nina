@@ -1,4 +1,4 @@
-mod test.boolean;
+mod test.bool;
 
 void test() {
     bool test  = true;
@@ -6,7 +6,7 @@ void test() {
 }
 
 /*
-define void @test() {
+define void @test.bool.test() {
 entry:
   %test = alloca i1, align 1
   store i1 true, ptr %test, align 1
