@@ -319,6 +319,14 @@ fn Node* parse_factor(Parser* parser, CompileContext* context, Lexer* lexer) {
         node = parse_string(parser, context, lexer);
     case TokenType.IDENT:
         node = parse_identifier_expr(parser, context, lexer);
+    case TokenType.LPAREN:
+        consume(parser, context, lexer, TokenType.LPAREN);
+
+        node = parse_expr(parser, context, lexer);
+
+        consume(parser, context, lexer, TokenType.RPAREN);
+
+        return node;
     default:
         highlighter::error(context, parser.current.range.start, parser.current.range.end, "Expression expected, got '%s'", parser.current.type);
     }
