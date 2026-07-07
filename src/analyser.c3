@@ -374,9 +374,105 @@ fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node
         }
     }
 
-    if (!context.functions.has_key(full_name.str_view())) {
-        String module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+    String module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+    if (!analyser.imports.contains(module_name)) {
+        highlighter::error(context, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", module_name);
+    }
 
+    next = node;
+    while (next) {
+        switch (next.type) {
+        case NodeType.ACCESS:
+            next = next.access_node.next;
+        case NodeType.CALL:
+            if (!context.functions.has_key(full_name.str_view())) {
+                highlighter::error(context, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", full_name.str_view(), module_name);
+            }
+
+            FunctionInfo* function_info = context.functions.get(full_name.str_view())!!;
+
+            bool vaarg = false;
+
+            int  min_parameters_len;
+            switch (function_info.node.type) {
+            case NodeType.FUNCTION:
+                min_parameters_len = (int)function_info.node.function_node.parameters.len();
+            case NodeType.EXT:
+                min_parameters_len = (int)function_info.node.ext_node.parameters.len();
+            default:
+                highlighter::panic();
+            }
+
+            NodeList parameters;
+            switch (function_info.node.type) {
+            case NodeType.FUNCTION:
+                parameters = function_info.node.function_node.parameters;
+            case NodeType.EXT:
+                parameters = function_info.node.ext_node.parameters;
+            default:
+                highlighter::panic();
+            }
+
+            foreach (index, parameter : parameters)
+            {
+                if (parameter.parameter_node.vaarg)
+                {
+                    vaarg              = true;
+                    min_parameters_len = (int)index;
+                    break;
+                }
+            }
+
+            int arguments_len  = (int)next.call_node.arguments.len();
+            int parameters_len = (int)parameters.len();
+    
+            if (arguments_len < min_parameters_len) {
+                highlighter::note(context, function_info.node.range.from, function_info.node.range.to, "Definition was here");
+                highlighter::error(context, next.range.from, next.range.to, "Expected more arguments");
+            }
+
+            if (arguments_len > parameters_len)
+            {
+                if (!vaarg)
+                {
+                    Node* argument = next.call_node.arguments[(long)arguments_len - 1];
+
+                    highlighter::error(context, argument.range.from, argument.range.to, "Expected less arguments");
+                }
+            }
+
+            foreach (int i, Node* argument : next.call_node.arguments)
+            {
+                if (i >= parameters_len) {
+                    break;
+                }
+
+                Node* parameter = parameters[i];
+
+                analyse_node(analyser, context, argument);
+
+                if (parameter.parameter_node.vaarg) {
+                    continue;
+                }
+
+                if (!lookup::compare_type(context.lookup, context.alloc, parameter, argument, analyser.scope))
+                {
+                    String parameter_type = lookup::get_type_name(context.lookup, context.alloc, parameter, analyser.scope);
+                    String argument_type  = lookup::get_type_name(context.lookup, context.alloc, argument, analyser.scope);
+
+                    highlighter::error(context, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", parameter_type, argument_type);
+                }
+            }
+
+            @todo("move above block to separate function");
+
+            next = null;
+        default:
+            highlighter::panic();
+        }
+    }
+
+    if (!context.functions.has_key(full_name.str_view())) {
         highlighter::error(context, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", function_name, module_name);
     }
 }

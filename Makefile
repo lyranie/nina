@@ -1,14 +1,17 @@
 .PHONY: all compiler lib copy-lib test-api test-unit clean
 
-all: compiler lib copy-lib
+all: compiler copy-std lib copy-lib
 
-debug: compile-debug lib copy-lib
+debug: compile-debug copy-std lib copy-lib
 
 compile-debug:
 	c3c build nina -D DEBUG
 
 compiler:
 	c3c build nina
+
+copy-std:
+	cp stdlib -r build/
 
 lib:
 	c3c build libnina

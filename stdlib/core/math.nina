@@ -1,0 +1,29 @@
+mod std.core.math;
+
+int add(int i, int j) {
+    ret i + j;
+}
+
+int sub(int i, int j) {
+    ret i - j;
+}
+
+int mul(int i, int j) {
+    ret i * j;
+}
+
+int div(int i, int j) {
+    ret i / j;
+}
+
+int sqr(int i) {
+    ret i * i;
+}
+
+int cube(int i) {
+    ret i * i * i;
+}
+
+int avg(int i, int j) {
+    ret (i + j) / 2;
+}

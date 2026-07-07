@@ -25,6 +25,17 @@ fn void main(String[] argv)
 
     @todo("check actual command provided via args");
 
+    // add stdlib
+    path::traverse("stdlib".to_path(context.alloc), fn bool?(path, is_dir, data) {
+        CompileContext* context = (CompileContext*)data;
+
+        if (!is_dir && path.has_extension("nina")) {
+            context.args.files.push(path.copy(context.alloc));
+        }
+
+        return false;
+    }, context)!!;
+
     foreach (String file : context.args.files) {
         String? path = file.to_tpath().absolute(context.alloc).copy(context.alloc);
         if (catch err = path) {
