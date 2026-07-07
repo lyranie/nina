@@ -8,7 +8,8 @@ path
 
 statement
     -> function
-    | ext
+    |  ext
+    |  use
     ;
 
 function
@@ -53,6 +54,14 @@ factor
     -> INT
     |  BOOL
     |  STRING
+    |  identifier_expr
+    |  "(" expr ")"
+    ;
+
+identifier_expr
+    -> call
+    |  access
+    |  IDENT
     ;
 
 ext
@@ -69,4 +78,12 @@ call
 
 arguments
     -> "(" (expr ("," expr)*)? ")"
+    ;
+
+use
+    -> "use" path ";"
+    ;
+
+access
+    -> IDENT "." identifier_expr
     ;
