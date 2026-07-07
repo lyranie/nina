@@ -1,0 +1,7 @@
+mod std.io;
+
+use libc;
+
+void printn(char* s) {
+    libc.printf("%s\n", s);
+}

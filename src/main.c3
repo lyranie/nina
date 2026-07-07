@@ -42,21 +42,29 @@ fn void main(String[] argv)
         Parser* parser = parser::create(context.alloc, lexer);
         parser::parse(parser, context, lexer);
 
+        registry::register(context, parser);
+
+        lexer::free(lexer, context.alloc);
+    }
+
+    foreach (String file : context.args.files) {
+        String path = file.to_tpath().absolute(context.alloc).copy(context.alloc)!!;
+
         // -- ANALYSER --
         profiler::commit(context.profiler, "Analyser");
 
-        Analyser* analyser = analyser::create(context.alloc, parser);
-        analyser::analyse(analyser, context, parser);
+        Analyser* analyser = analyser::create(context, path);
+        analyser::analyse(analyser, context);
 
         // -- GENERATOR --
         profiler::commit(context.profiler, "Generator");
-        Generator* generator = generator::create(context, parser);
-        generator::generate(generator, context, parser);
+        Generator* generator = generator::create(context);
+        generator::generate(generator, context);
 
         profiler::commit(context.profiler, "Cleanup");
 
-        lexer::free(lexer, context.alloc);
-        parser::free(parser, context.alloc);
+        // TODO: free nodes
+        // parser::free(parser, context.alloc);
         analyser::free(analyser, context.alloc);
         generator::free(generator, context.alloc);
 

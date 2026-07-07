@@ -193,6 +193,8 @@ fn void word(Lexer* lexer, CompileContext* context) => @pool() {
         type = TokenType.TRUE;
     case "false":
         type = TokenType.FALSE;
+    case "use":
+        type = TokenType.KW_USE;
     default:
         type = TokenType.IDENT;
     }

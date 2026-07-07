@@ -21,6 +21,8 @@ fn void parse(Parser* parser, CompileContext* context, Lexer* lexer) {
     if (parser.current.type != TokenType.EOF) {
         parse_mod(parser, context, lexer);
     }
+
+    context.trees.set(context.current_file, parser.context.ast);
 }
 
 fn void parse_mod(Parser* parser, CompileContext* context, Lexer* lexer) {
@@ -38,6 +40,8 @@ fn void parse_mod(Parser* parser, CompileContext* context, Lexer* lexer) {
             statements.push(parse_function(parser, context, lexer));
         case TokenType.KW_EXT:
             statements.push(parse_ext(parser, context, lexer));
+        case TokenType.KW_USE:
+            statements.push(parse_use(parser, context, lexer));
         default:
             highlighter::error(context, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
         }
@@ -363,6 +367,12 @@ fn Node* parse_identifier_statement(Parser* parser, CompileContext* context, Lex
         consume(parser, context, lexer, TokenType.SEMI);
 
         return node;
+    case TokenType.PERIOD:
+        Node* node = parse_access(parser, context, lexer);
+        
+        consume(parser, context, lexer, TokenType.SEMI);
+
+        return node;
     default:
         return parse_variable(parser, context, lexer);
     }
@@ -433,6 +443,8 @@ fn Node* parse_identifier_expr(Parser* parser, CompileContext* context, Lexer* l
     switch (peek(parser, lexer).type) {
     case TokenType.LPAREN:
         return parse_call(parser, context, lexer);
+    case TokenType.PERIOD:
+        return parse_access(parser, context, lexer);
     default:
         return parse_identifier(parser, context, lexer);
     }
@@ -459,6 +471,37 @@ fn Node* parse_variable(Parser* parser, CompileContext* context, Lexer* lexer) {
         node.variable_node.type  = type;
         node.variable_node.name  = name;
         node.variable_node.value = value;
+    };
+}
+
+fn Node* parse_use(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.KW_USE);
+
+    Node* path = parse_path(parser, context, lexer);
+
+    consume(parser, context, lexer, TokenType.SEMI);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.USE, start, end; node) {
+        node.use_node.path = path;
+    };
+}
+
+fn Node* parse_access(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+    Node* name  = parse_identifier(parser, context, lexer);
+
+    consume(parser, context, lexer, TokenType.PERIOD);
+
+    Node* next = parse_identifier_expr(parser, context, lexer);
+    Range end  = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.ACCESS, start, end; node) {
+        node.access_node.name = name;
+        node.access_node.next = next;
     };
 }
 

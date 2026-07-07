@@ -1,15 +1,13 @@
 mod test.main;
 
-ext int printf(char* fmt, args...);
-
-void greet(char* name) {
-    printf("Hello, %s\n", name);
-}
+use std.io;
+use libc;
 
 int main(int argc, char** argv) {
-    greet("Allie");
+    libc.printf("Hello, World!\n");
+
+    char* hello = "Helloooo";
+    std.io.printn(hello);
 
     ret 0;
-
-    greet("");
 }

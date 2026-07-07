@@ -1,0 +1,3 @@
+mod libc;
+
+ext int printf(char* fmt, args...);

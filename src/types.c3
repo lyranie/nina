@@ -33,12 +33,15 @@ enum CompileCommand {
 // -- COMPILER --
 
 struct CompileContext {
-    Allocator               alloc;
-    Profiler*               profiler;
-    Args*                   args;
-    HashMap{String, String} mods;
-    String                  current_file;
-    Lookup*                 lookup;
+    Allocator                      alloc;
+    Profiler*                      profiler;
+    Args*                          args;
+    HashMap{String, String}        mods;
+    String                         current_file;
+    Lookup*                        lookup;
+    HashMap{String, Node*}         trees;
+    HashMap{String, FunctionInfo*} functions;
+    HashMap{String, LLVMModuleRef} modules;
 }
 
 struct Range {
@@ -67,7 +70,7 @@ struct Token {
         Range start;
         Range end;
     }
-    void*     data;
+    void* data;
 }
 
 enum TokenType {
@@ -82,14 +85,8 @@ enum TokenType {
 
     KW_MOD,
     KW_RET,
-    KW_TYPE,
-    KW_NEW,
     KW_EXT,
-    KW_AS,
-    KW_IF,
-    KW_ELSE,
-    KW_FOR,
-    KW_IN,
+    KW_USE,
 
     SEMI,
     LPAREN,
@@ -190,6 +187,13 @@ struct Node {
             Node* name;
             Node* value;
         }
+        struct use_node {
+            Node* path;
+        }
+        struct access_node {
+            Node* name;
+            Node* next;
+        }
     }
 }
 
@@ -208,11 +212,14 @@ enum NodeType {
     BOOL,
     STRING,
     VARIABLE,
+    USE,
+    ACCESS,
 }
 
 struct Analyser {
-    Scope* scope;
-    String module_name;
+    Scope*     scope;
+    String     module_name;
+    StringList imports;
 }
 
 struct Scope {

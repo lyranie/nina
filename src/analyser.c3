@@ -9,18 +9,21 @@ import std::collections::map;
 import std::io;
 import std::os;
 
-fn Analyser* create(Allocator alloc, Parser* parser) {
-    Analyser* analyser = alloc::new(alloc, Analyser);
-    String    mod      = parser.context.ast.mod_node.path.path_node.path;
+fn Analyser* create(CompileContext* context, String path) {
+    context.current_file = path;
+
+    Analyser* analyser = alloc::new(context.alloc, Analyser);
+    String    mod      = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
     
-    analyser.scope       = scope::create(alloc);
+    analyser.scope       = scope::create(context.alloc);
     analyser.module_name = mod;
+    analyser.imports.init(context.alloc);
 
     return analyser;
 }
 
-fn void analyse(Analyser* analyser, CompileContext* context, Parser* parser) {
-    analyse_node(analyser, context, parser.context.ast);
+fn void analyse(Analyser* analyser, CompileContext* context) {
+    analyse_node(analyser, context, context.trees.get(context.current_file))!!;
 }
 
 fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, void* data = null) {
@@ -49,6 +52,10 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
         analyse_ident(analyser, context, node);
     case NodeType.VARIABLE:
         analyse_variable(analyser, context, node);
+    case NodeType.USE:
+        analyse_use(analyser, context, node);
+    case NodeType.ACCESS:
+        analyse_access(analyser, context, node);
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -296,6 +303,81 @@ fn void analyse_compound(Analyser* analyser, CompileContext* context, NodeList s
             returned = true;
             highlighter::note(context, statement.range.from, statement.range.to, "No statement will be executed after return");
         }
+    }
+}
+
+fn void analyse_use(Analyser* analyser, CompileContext* context, Node* node) {
+    String path = node.use_node.path.path_node.path;
+
+    bool found = false;
+    foreach (Node* tree : context.trees.values(context.alloc)) {
+        if (tree.mod_node.path.path_node.path == path) {
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        highlighter::error(context, node.range.from, node.range.to, "Could not find module '%s'", path);
+    }
+
+    analyser.imports.push(path);
+}
+
+fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) {
+    Node*  path = node.access_node.name;
+    String name = path.path_node.path;
+
+    if (scope::has_variable(analyser.scope, name)) {
+        @todo("analyse_access for variable");
+    } else {
+        bool module_found = false;
+
+        foreach (String mod : analyser.imports) {
+            if (mod == name || mod.starts_with(string::tformat("%s.", name))) {
+                module_found = true;
+                break;
+            }
+        }
+
+        if (module_found) {
+            traverse_access_module(analyser, context, node);
+        } else {
+            highlighter::error(context, path.range.from, path.range.to, "Could not find '%s'", name);
+        }
+    }
+}
+
+fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
+    String name = node.access_node.name.path_node.path;
+    
+    DString full_name;
+    full_name.tinit();
+
+    String function_name;
+
+    Node* next = node;
+    while (next) {
+        switch (next.type) {
+        case NodeType.ACCESS:
+            full_name.append(next.access_node.name.ident_node.name);
+            full_name.append(".");
+
+            next = next.access_node.next;
+        case NodeType.CALL:
+            full_name.append(next.call_node.name.ident_node.name);
+            function_name = next.call_node.name.ident_node.name;
+
+            next = null;
+        default:
+            highlighter::panic();
+        }
+    }
+
+    if (!context.functions.has_key(full_name.str_view())) {
+        String module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+
+        highlighter::error(context, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", function_name, module_name);
     }
 }
 
