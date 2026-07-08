@@ -183,64 +183,7 @@ fn void analyse_ext(Analyser* analyser, CompileContext* context, Node* node) {
 fn void analyse_call(Analyser* analyser, CompileContext* context, Node* node) {
     String name = node.call_node.name.path_node.path;
 
-    if (!scope::has_function(analyser.scope, name)) {
-        highlighter::error(context, node.range.from, node.range.to, "Could not find function '%s'", name);
-    }
-
-    FunctionInfo* function_info = scope::get_function(analyser.scope, name);
-
-    bool vaarg = false;
-    int  min_parameters_len = (int)function_info.node.function_node.parameters.len();
-    foreach (index, parameter : function_info.node.function_node.parameters)
-    {
-        if (parameter.parameter_node.vaarg)
-        {
-            vaarg              = true;
-            min_parameters_len = (int)index;
-            break;
-        }
-    }
-
-    int arguments_len  = (int)node.call_node.arguments.len();
-    int parameters_len = (int)function_info.node.function_node.parameters.len();
-    
-    if (arguments_len < min_parameters_len) {
-        highlighter::note(context, function_info.node.range.from, function_info.node.range.to, "Definition was here");
-        highlighter::error(context, node.range.from, node.range.to, "Expected more arguments");
-    }
-
-    if (arguments_len > parameters_len)
-    {
-        if (!vaarg)
-        {
-            Node* argument = node.call_node.arguments[(long)arguments_len - 1];
-
-            highlighter::error(context, argument.range.from, argument.range.to, "Expected less arguments");
-        }
-    }
-
-    foreach (int i, Node* argument : node.call_node.arguments)
-    {
-        if (i >= parameters_len) {
-            break;
-        }
-
-        Node* parameter = function_info.node.function_node.parameters[i];
-
-        analyse_node(analyser, context, argument);
-
-        if (parameter.parameter_node.vaarg) {
-            continue;
-        }
-
-        if (!lookup::compare_type(context.lookup, context.alloc, parameter, argument, analyser.scope))
-        {
-            String parameter_type = lookup::get_type_name(context.lookup, context.alloc, parameter, analyser.scope);
-            String argument_type  = lookup::get_type_name(context.lookup, context.alloc, argument, analyser.scope);
-
-            highlighter::error(context, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", parameter_type, argument_type);
-        }
-    }
+    handle_call(analyser, context, node, name, analyser.module_name, scope::get_function(analyser.scope, name));
 }
 
 fn void analyse_bin(Analyser* analyser, CompileContext* context, Node* node) {
@@ -385,84 +328,7 @@ fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node
         case NodeType.ACCESS:
             next = next.access_node.next;
         case NodeType.CALL:
-            if (!context.functions.has_key(full_name.str_view())) {
-                highlighter::error(context, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", full_name.str_view(), module_name);
-            }
-
-            FunctionInfo* function_info = context.functions.get(full_name.str_view())!!;
-
-            bool vaarg = false;
-
-            int  min_parameters_len;
-            switch (function_info.node.type) {
-            case NodeType.FUNCTION:
-                min_parameters_len = (int)function_info.node.function_node.parameters.len();
-            case NodeType.EXT:
-                min_parameters_len = (int)function_info.node.ext_node.parameters.len();
-            default:
-                highlighter::panic();
-            }
-
-            NodeList parameters;
-            switch (function_info.node.type) {
-            case NodeType.FUNCTION:
-                parameters = function_info.node.function_node.parameters;
-            case NodeType.EXT:
-                parameters = function_info.node.ext_node.parameters;
-            default:
-                highlighter::panic();
-            }
-
-            foreach (index, parameter : parameters)
-            {
-                if (parameter.parameter_node.vaarg)
-                {
-                    vaarg              = true;
-                    min_parameters_len = (int)index;
-                    break;
-                }
-            }
-
-            int arguments_len  = (int)next.call_node.arguments.len();
-            int parameters_len = (int)parameters.len();
-    
-            if (arguments_len < min_parameters_len) {
-                highlighter::note(context, function_info.node.range.from, function_info.node.range.to, "Definition was here");
-                highlighter::error(context, next.range.from, next.range.to, "Expected more arguments");
-            }
-
-            if (arguments_len > parameters_len)
-            {
-                if (!vaarg)
-                {
-                    Node* argument = next.call_node.arguments[(long)arguments_len - 1];
-
-                    highlighter::error(context, argument.range.from, argument.range.to, "Expected less arguments");
-                }
-            }
-
-            foreach (int i, Node* argument : next.call_node.arguments)
-            {
-                if (i >= parameters_len) {
-                    break;
-                }
-
-                Node* parameter = parameters[i];
-
-                analyse_node(analyser, context, argument);
-
-                if (parameter.parameter_node.vaarg) {
-                    continue;
-                }
-
-                if (!lookup::compare_type(context.lookup, context.alloc, parameter, argument, analyser.scope))
-                {
-                    String parameter_type = lookup::get_type_name(context.lookup, context.alloc, parameter, analyser.scope);
-                    String argument_type  = lookup::get_type_name(context.lookup, context.alloc, argument, analyser.scope);
-
-                    highlighter::error(context, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", parameter_type, argument_type);
-                }
-            }
+            handle_call(analyser, context, next, full_name.str_view(), module_name, context.functions.get(full_name.str_view()) ?? null);
 
             @todo("move above block to separate function");
 
@@ -498,6 +364,73 @@ fn bool compound_returns(Analyser* analyser, CompileContext* context, NodeList s
     }
 
     return false;
+}
+
+fn void handle_call(Analyser* analyser, CompileContext* context, Node* node, String name, String module_name, FunctionInfo* function_info) {
+    if (!function_info) {
+        highlighter::error(context, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", name, module_name);
+    }
+
+    bool vaarg = false;
+
+    int      min_parameters_len;
+    NodeList parameters;
+    
+    switch (function_info.node.type) {
+    case NodeType.FUNCTION:
+        min_parameters_len = (int)function_info.node.function_node.parameters.len();
+        parameters         = function_info.node.function_node.parameters;
+    case NodeType.EXT:
+        min_parameters_len = (int)function_info.node.ext_node.parameters.len();
+        parameters         = function_info.node.ext_node.parameters;
+    default:
+        highlighter::panic();
+    }
+
+    foreach (int i, Node* parameter : parameters) {
+        if (parameter.parameter_node.vaarg) {
+            vaarg              = true;
+            min_parameters_len = i;
+            break;
+        }
+    }
+
+    int arguments_len  = (int)node.call_node.arguments.len();
+    int parameters_len = (int)parameters.len();
+    
+    if (arguments_len < min_parameters_len) {
+        highlighter::note(context, function_info.node.range.from, function_info.node.range.to, "Definition was here");
+        highlighter::error(context, node.range.from, node.range.to, "Expected more arguments");
+    }
+
+    if (arguments_len > parameters_len) {
+        if (!vaarg) {
+            Node* argument = node.call_node.arguments[(long)arguments_len - 1];
+
+            highlighter::error(context, argument.range.from, argument.range.to, "Expected less arguments");
+        }
+    }
+
+    foreach (int i, Node* argument : node.call_node.arguments) {
+        if (i >= parameters_len) {
+            break;
+        }
+
+        Node* parameter = parameters[i];
+
+        analyse_node(analyser, context, argument);
+
+        if (parameter.parameter_node.vaarg) {
+            continue;
+        }
+
+        if (!lookup::compare_type(context.lookup, context.alloc, parameter, argument, analyser.scope)) {
+            String parameter_type = lookup::get_type_name(context.lookup, context.alloc, parameter, analyser.scope);
+            String argument_type  = lookup::get_type_name(context.lookup, context.alloc, argument, analyser.scope);
+
+            highlighter::error(context, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", parameter_type, argument_type);
+        }
+    }
 }
 
 fn void free(Analyser* analyser, Allocator alloc) {
