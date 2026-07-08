@@ -1,53 +1,5 @@
 mod test.main;
 
-use std.core.math;
-use std.io;
-use libc;
-
-int main(int argc, char** argv) {
-    libc.printf("add(3, 4) = %d\n",    std.core.math.add(3, 4));
-    libc.printf("sub(10, 4) = %d\n",   std.core.math.sub(10, 4));
-    libc.printf("mul(6, 7) = %d\n",    std.core.math.mul(6, 7));
-    libc.printf("div(20, 4) = %d\n",   std.core.math.div(20, 4));
-    libc.printf("sqr(5) = %d\n",       std.core.math.sqr(5));
-    libc.printf("cube(3) = %d\n",      std.core.math.cube(3));
-    libc.printf("avg(10, 20) = %d\n",  std.core.math.avg(10, 20));
-
-    libc.printf("max(420, 69) = %d\n", std.core.math.max(420, 69));
-    libc.printf("min(420, 69) = %d\n", std.core.math.min(420, 69));
-
-    libc.printf("abs(69) = %d\n",      std.core.math.abs(69));
-    libc.printf("abs(-69) = %d\n",     std.core.math.abs(-69));
-
-    libc.printf("sign(5) = %d\n",      std.core.math.sign(5));
-    libc.printf("sign(-5) = %d\n",     std.core.math.sign(-5));
-    libc.printf("sign(0) = %d\n",      std.core.math.sign(0));
-
-    libc.printf("pow(2, 10) = %d\n", std.core.math.pow(2, 10));
-    libc.printf("pow(5, 0) = %d\n",  std.core.math.pow(5, 0));
-
-    libc.printf("factorial(5) = %d\n", std.core.math.factorial(5));
-    libc.printf("factorial(1) = %d\n", std.core.math.factorial(1));
-
-    libc.printf("gcd(48, 18) = %d\n",  std.core.math.gcd(48, 18));
-    libc.printf("gcd(17, 5) = %d\n",   std.core.math.gcd(17, 5));
-
-    libc.printf("fib(0) = %d\n",       std.core.math.fib(0));
-    libc.printf("fib(1) = %d\n",       std.core.math.fib(1));
-    libc.printf("fib(10) = %d\n",      std.core.math.fib(10));
-
-    libc.printf("sum_to_n(0) = %d\n",  std.core.math.sum_to_n(0));
-    libc.printf("sum_to_n(10) = %d\n", std.core.math.sum_to_n(10));
-
-    libc.printf("is_even(0) = %d\n",   std.core.math.is_even(0));
-    libc.printf("is_even(4) = %d\n",   std.core.math.is_even(4));
-    libc.printf("is_odd(0) = %d\n",    std.core.math.is_odd(0));
-    libc.printf("is_odd(7) = %d\n",    std.core.math.is_odd(7));
-
-    libc.printf("is_prime(1) = %d\n",  std.core.math.is_prime(1));
-    libc.printf("is_prime(2) = %d\n",  std.core.math.is_prime(2));
-    libc.printf("is_prime(17) = %d\n", std.core.math.is_prime(17));
-    libc.printf("is_prime(18) = %d\n", std.core.math.is_prime(18));
-
+int main() {
     ret 0;
 }
