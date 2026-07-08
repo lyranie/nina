@@ -23,8 +23,8 @@ int main(int argc, char** argv) {
     libc.printf("sign(-5) = %d\n",     std.core.math.sign(-5));
     libc.printf("sign(0) = %d\n",      std.core.math.sign(0));
 
-    libc.printf("power(2, 10) = %d\n", std.core.math.power(2, 10));
-    libc.printf("power(5, 0) = %d\n",  std.core.math.power(5, 0));
+    libc.printf("pow(2, 10) = %d\n", std.core.math.pow(2, 10));
+    libc.printf("pow(5, 0) = %d\n",  std.core.math.pow(5, 0));
 
     libc.printf("factorial(5) = %d\n", std.core.math.factorial(5));
     libc.printf("factorial(1) = %d\n", std.core.math.factorial(1));

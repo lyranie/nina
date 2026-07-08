@@ -1,4 +1,6 @@
-.PHONY: all compiler lib copy-lib test-api test-unit clean
+STDLIB_FILES := $(shell find test/stdlib -type f -name '*.nina')
+
+.PHONY: all compiler lib copy-lib test-api test-unit test-stdlib clean
 
 all: compiler copy-std lib copy-lib
 
@@ -29,6 +31,10 @@ create-runner: lib
 
 test-unit: create-runner
 	test/unit/runner/runner
+
+test-stdlib: all
+	./build/nina compile $(STDLIB_FILES) test/suite/test.nina -o testrunner
+	./testrunner
 
 clean:
 	rm -rf build

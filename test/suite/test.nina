@@ -1,0 +1,9 @@
+mod test;
+
+use libc;
+
+void assert(bool condition, char* message) {
+    if (condition == false) {
+        libc.printf("%s\n", message);
+    }
+}

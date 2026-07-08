@@ -64,11 +64,11 @@ int sign(int i) {
     }
 }
 
-int power(int i, int j) {
+int pow(int i, int j) {
     if (j <= 0) {
         ret 1;
     } else {
-        ret i * power(i, j - 1);
+        ret i * pow(i, j - 1);
     }
 }
 

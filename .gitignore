@@ -3,3 +3,4 @@ build/
 main
 test/api/lib
 test/unit/runner/runner
+testrunner

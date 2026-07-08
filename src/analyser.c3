@@ -97,7 +97,7 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
 
     scope::add_function(analyser.scope, context.alloc, name, analyser.module_name, context.current_file, node);
 
-    if (!always_returns(analyser, context, node) && lookup::get_type_name(context.lookup, context.alloc, node, analyser.scope) != "void")
+    if (!always_returns(analyser, context, node) && lookup::get_type_name(context, node, analyser.scope) != "void")
     {
         highlighter::error(context, node.range.from, node.range.to, "Missing return at end of function");
     }
@@ -195,9 +195,12 @@ fn void analyse_call(Analyser* analyser, CompileContext* context, Node* node) =>
 fn void analyse_bin(Analyser* analyser, CompileContext* context, Node* node) {
     @todo("check if operator is applicable to type");
 
-    if (!lookup::compare_type(context.lookup, context.alloc, node.bin_node.left, node.bin_node.right, analyser.scope)) {
-        String left_type  = lookup::get_type_name(context.lookup, context.alloc, node.bin_node.left, analyser.scope);
-        String right_type = lookup::get_type_name(context.lookup, context.alloc, node.bin_node.right, analyser.scope);
+    analyse_node(analyser, context, node.bin_node.left);
+    analyse_node(analyser, context, node.bin_node.right);
+
+    if (!lookup::compare_type(context, node.bin_node.left, node.bin_node.right, analyser.scope)) {
+        String left_type  = lookup::get_type_name(context, node.bin_node.left, analyser.scope);
+        String right_type = lookup::get_type_name(context, node.bin_node.right, analyser.scope);
 
         highlighter::error(context, node.range.from, node.range.to, "Cannot operate type '%s' with type '%s'", left_type, right_type);
     }
@@ -458,9 +461,9 @@ fn void handle_call(Analyser* analyser, CompileContext* context, Node* node, Str
             continue;
         }
 
-        if (!lookup::compare_type(context.lookup, context.alloc, parameter, argument, analyser.scope)) {
-            String parameter_type = lookup::get_type_name(context.lookup, context.alloc, parameter, analyser.scope);
-            String argument_type  = lookup::get_type_name(context.lookup, context.alloc, argument, analyser.scope);
+        if (!lookup::compare_type(context, parameter, argument, analyser.scope)) {
+            String parameter_type = lookup::get_type_name(context, parameter, analyser.scope);
+            String argument_type  = lookup::get_type_name(context, argument, analyser.scope);
 
             highlighter::error(context, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", parameter_type, argument_type);
         }

@@ -116,12 +116,12 @@ fn LLVMMetadataRef get_llvm_debug_type_from_kind(Allocator alloc, Generator* gen
     }
 }
 
-fn bool compare_type(Lookup* lookup, Allocator alloc, Node* node, Node* other, Scope* scope) {
-    String node_type  = get_type_name(lookup, alloc, node, scope);
-    String other_type = get_type_name(lookup, alloc, other, scope);
+fn bool compare_type(CompileContext* context, Node* node, Node* other, Scope* scope) {
+    String node_type  = get_type_name(context, node, scope);
+    String other_type = get_type_name(context, other, scope);
 
-    String node_base_group  = get_base_type_group(lookup, alloc, node, scope);
-    String other_base_group = get_base_type_group(lookup, alloc, other, scope);
+    String node_base_group  = get_base_type_group(context, node, scope);
+    String other_base_group = get_base_type_group(context, other, scope);
 
     if (node_base_group == other_base_group) {
         return true;
@@ -138,11 +138,11 @@ fn bool compare_type(Lookup* lookup, Allocator alloc, Node* node, Node* other, S
     return false;
 }
 
-fn String get_type_name(Lookup* lookup, Allocator alloc, Node* node, Scope* scope) {
+fn String get_type_name(CompileContext* context, Node* node, Scope* scope) {
     switch (node.type) {
     case NodeType.PARAMETER:
         if (node.parameter_node.type) {
-            return get_type_name(lookup, alloc, node.parameter_node.type, scope);
+            return get_type_name(context, node.parameter_node.type, scope);
         }
 
         return "any";
@@ -150,7 +150,7 @@ fn String get_type_name(Lookup* lookup, Allocator alloc, Node* node, Scope* scop
         String type_name   = node.type_node.name.ident_node.name;
         String type_suffix = node.type_node.suffix;
 
-        return string::format(alloc, "%s%s", type_name, type_suffix);
+        return string::format(context.alloc, "%s%s", type_name, type_suffix);
     case NodeType.INT:
         return "int";
     case NodeType.BOOL:
@@ -160,36 +160,56 @@ fn String get_type_name(Lookup* lookup, Allocator alloc, Node* node, Scope* scop
     case NodeType.IDENT:
         String name = node.ident_node.name;
 
-        return get_type_name(lookup, alloc, scope::get_variable(scope, name).node, scope);
+        return get_type_name(context, scope::get_variable(scope, name).node, scope);
     case NodeType.VARIABLE:
-        return get_type_name(lookup, alloc, node.variable_node.type, scope);
+        return get_type_name(context, node.variable_node.type, scope);
     case NodeType.FUNCTION:
-        return get_type_name(lookup, alloc, node.function_node.type, scope);
+        return get_type_name(context, node.function_node.type, scope);
     case NodeType.BIN:
-        return get_type_name(lookup, alloc, node.bin_node.left, scope);
+        switch (node.bin_node.operator.type) {
+        case TokenType.IS_EQUAL:
+        case TokenType.NOT_EQUAL:
+        case TokenType.GTE:
+        case TokenType.LTE:
+        case TokenType.LANGLE:
+        case TokenType.RANGLE:
+            return "bool";
+        default:
+            return get_type_name(context, node.bin_node.left, scope);
+        }
     case NodeType.UNARY:
-        return get_type_name(lookup, alloc, node.unary_node.node, scope);
+        return get_type_name(context, node.unary_node.node, scope);
     case NodeType.CALL:
         String        name          = node.call_node.name.ident_node.name;
         FunctionInfo* function_info = scope::get_function(scope, name);
 
-        return get_type_name(lookup, alloc, function_info.node, scope);
+        return get_type_name(context, function_info.node, scope);
+    case NodeType.ACCESS:
+        Node*  path = node.access_node.name;
+        String name = path.path_node.path;
+
+        if (scope::has_variable(scope, name)) {
+            @todo("get_type_name_access for variable");
+            highlighter::panic();
+        } else {
+            return traverse_access_module(context, node, scope);
+        }
     default:
         highlighter::panic("Missing get_type_name case for type '%s'", node.type);
     }
 }
 
-fn String get_base_type_group(Lookup* lookup, Allocator alloc, Node* node, Scope* scope) {
+fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope) {
     switch (node.type) {
     case NodeType.PARAMETER:
         if (node.parameter_node.type) {
-            return get_base_type_group(lookup, alloc, node.parameter_node.type, scope);
+            return get_base_type_group(context, node.parameter_node.type, scope);
         }
 
         return "anytype";
     case NodeType.TYPE:
         String       type_name      = node.type_node.name.ident_node.name;
-        LLVMTypeRef  llvm_type      = get_llvm_type(lookup, node);
+        LLVMTypeRef  llvm_type      = get_llvm_type(context.lookup, node);
         LLVMTypeKind llvm_type_kind = llvm::get_type_kind(llvm_type);
 
         switch (llvm_type_kind) {
@@ -215,27 +235,157 @@ fn String get_base_type_group(Lookup* lookup, Allocator alloc, Node* node, Scope
     case NodeType.IDENT:
         String name = node.ident_node.name;
 
-        return get_base_type_group(lookup, alloc, scope::get_variable(scope, name).node, scope);
+        return get_base_type_group(context, scope::get_variable(scope, name).node, scope);
     case NodeType.VARIABLE:
-        return get_base_type_group(lookup, alloc, node.variable_node.type, scope);
+        return get_base_type_group(context, node.variable_node.type, scope);
     case NodeType.RET:
         if (node.ret_node.value) {
-            return get_base_type_group(lookup, alloc, node.ret_node.value, scope);
+            return get_base_type_group(context, node.ret_node.value, scope);
         }
 
         return "void";
     case NodeType.BIN:
-        return get_base_type_group(lookup, alloc, node.bin_node.left, scope);
+        switch (node.bin_node.operator.type) {
+        case TokenType.IS_EQUAL:
+        case TokenType.NOT_EQUAL:
+        case TokenType.GTE:
+        case TokenType.LTE:
+        case TokenType.LANGLE:
+        case TokenType.RANGLE:
+            return "boolean";
+        default:
+            return get_base_type_group(context, node.bin_node.left, scope);
+        }
     case NodeType.UNARY:
-        return get_base_type_group(lookup, alloc, node.unary_node.node, scope);
+        return get_base_type_group(context, node.unary_node.node, scope);
     case NodeType.CALL:
         String        name          = node.call_node.name.ident_node.name;
         FunctionInfo* function_info = scope::get_function(scope, name);
 
-        return get_base_type_group(lookup, alloc, function_info.node, scope);
+        return get_base_type_group(context, function_info.node, scope);
     case NodeType.FUNCTION:
-        return get_base_type_group(lookup, alloc, node.function_node.type, scope);
+        return get_base_type_group(context, node.function_node.type, scope);
+    case NodeType.ACCESS:
+        Node*  path = node.access_node.name;
+        String name = path.path_node.path;
+
+        if (scope::has_variable(scope, name)) {
+            @todo("get_type_name_access for variable");
+            highlighter::panic();
+        } else {
+            return traverse_access_module_base_group(context, node, scope);
+        }
     default:
         highlighter::panic("Missing get_base_type_group case for type '%s'", node.type);
     }
+}
+
+fn String traverse_access_module(CompileContext* context, Node* node, Scope* scope) => @pool() {
+    String name = node.access_node.name.path_node.path;
+    
+    DString full_name;
+    full_name.tinit();
+
+    String function_name;
+
+    Node* next = node;
+    while (next) {
+        switch (next.type) {
+        case NodeType.ACCESS:
+            full_name.append(next.access_node.name.ident_node.name);
+            full_name.append(".");
+
+            next = next.access_node.next;
+        case NodeType.CALL:
+            full_name.append(next.call_node.name.ident_node.name);
+            function_name = next.call_node.name.ident_node.name;
+
+            next = null;
+        default:
+            highlighter::panic();
+        }
+    }
+
+    String module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+
+    next = node;
+    while (next) {
+        switch (next.type) {
+        case NodeType.ACCESS:
+            next = next.access_node.next;
+        case NodeType.CALL:
+            FunctionInfo* function_info = context.functions.get(full_name.str_view())!!;
+            Node*         type_node;
+
+            switch (function_info.node.type) {
+            case NodeType.EXT:
+                type_node = function_info.node.ext_node.type;
+            case NodeType.FUNCTION:
+                type_node = function_info.node.function_node.type;
+            default:
+                highlighter::panic();
+            }
+
+            return get_type_name(context, type_node, scope);
+        default:
+            highlighter::panic();
+        }
+    }
+    
+    highlighter::panic();
+}
+
+fn String traverse_access_module_base_group(CompileContext* context, Node* node, Scope* scope) => @pool() {
+    String name = node.access_node.name.path_node.path;
+    
+    DString full_name;
+    full_name.tinit();
+
+    String function_name;
+
+    Node* next = node;
+    while (next) {
+        switch (next.type) {
+        case NodeType.ACCESS:
+            full_name.append(next.access_node.name.ident_node.name);
+            full_name.append(".");
+
+            next = next.access_node.next;
+        case NodeType.CALL:
+            full_name.append(next.call_node.name.ident_node.name);
+            function_name = next.call_node.name.ident_node.name;
+
+            next = null;
+        default:
+            highlighter::panic();
+        }
+    }
+
+    String module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+
+    next = node;
+    while (next) {
+        switch (next.type) {
+        case NodeType.ACCESS:
+            next = next.access_node.next;
+        case NodeType.CALL:
+            FunctionInfo* function_info = context.functions.get(full_name.str_view())!!;
+            Node*         type_node;
+
+            switch (function_info.node.type) {
+            case NodeType.EXT:
+                type_node = function_info.node.ext_node.type;
+            case NodeType.FUNCTION:
+                type_node = function_info.node.function_node.type;
+            default:
+                highlighter::panic();
+            }
+
+            return get_base_type_group(context, type_node, scope);
+        default:
+            highlighter::panic();
+        }
+    }
+    
+    highlighter::panic();
 }

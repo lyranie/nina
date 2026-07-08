@@ -161,7 +161,7 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
 
     generator.scope = generator.scope.parent;
 
-    if (!returned && lookup::get_type_name(context.lookup, context.alloc, node, generator.scope) == "void")
+    if (!returned && lookup::get_type_name(context, node, generator.scope) == "void")
     {
         llvm::build_ret_void(generator.llvm_builder);
     }
@@ -309,7 +309,7 @@ fn LLVMValueRef generate_string(Generator* generator, CompileContext* context, N
 fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node* node) {
     LLVMValueRef left  = generate_node(generator, context, node.bin_node.left);
     LLVMValueRef right = generate_node(generator, context, node.bin_node.right);
-    String       type  = lookup::get_base_type_group(context.lookup, context.alloc, node.bin_node.left, generator.scope);
+    String       type  = lookup::get_base_type_group(context, node.bin_node.left, generator.scope);
 
     debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
@@ -424,7 +424,7 @@ fn LLVMValueRef generate_unary(Generator* generator, CompileContext* context, No
 
     switch (node.unary_node.operator.type) {
     case TokenType.MINUS:
-        if (lookup::get_base_type_group(context.lookup, context.alloc, node, generator.scope) == "integer") {
+        if (lookup::get_base_type_group(context, node, generator.scope) == "integer") {
             LLVMTypeRef int_type = context.lookup.get("int").llvm_type!!;
             
             return llvm::build_mul(generator.llvm_builder, llvm_value, create_int(int_type, -1), "");
