@@ -1,6 +1,7 @@
 module nina::parser;
 
 import nina::core;
+import nina::util;
 import nina::types;
 import nina::highlighter;
 
@@ -225,6 +226,8 @@ fn NodeList parse_compound(Parser* parser, CompileContext* context, Lexer* lexer
             statements.push(parse_ret(parser, context, lexer));
         case TokenType.IDENT:
             statements.push(parse_identifier_statement(parser, context, lexer));
+        case TokenType.KW_IF:
+            statements.push(parse_if(parser, context, lexer));
         default:
             highlighter::error(context, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
         }
@@ -255,47 +258,26 @@ fn Node* parse_ret(Parser* parser, CompileContext* context, Lexer* lexer) {
 }
 
 fn Node* parse_expr(Parser* parser, CompileContext* context, Lexer* lexer) {
-    Node* node = parse_term(parser, context, lexer);
-
-    while (parser.current.type == TokenType.PLUS  ||
-           parser.current.type == TokenType.MINUS ||
-           parser.current.type == TokenType.AND   ||
-           parser.current.type == TokenType.OR) {
-        Token operator = parser.current;
-
-        consume(parser, context, lexer, operator.type);
-
-        Node* left = alloc::new(context.alloc, Node);
-        *left = *node;
-
-        Node* right = parse_term(parser, context, lexer);
-        
-        node = @make_node(context, NodeType.BIN, left.range.from, right.range.to; _node) {
-            _node.bin_node.operator = operator;
-            _node.bin_node.left     = left;
-            _node.bin_node.right    = right;
-        };
-    }
-
-    return node;
+    return parse_binary(parser, context, lexer, 1);
 }
 
-fn Node* parse_term(Parser* parser, CompileContext* context, Lexer* lexer) {
+fn Node* parse_binary(Parser* parser, CompileContext* context, Lexer* lexer, int min_prec) {
     Node* node = parse_factor(parser, context, lexer);
 
-    while (parser.current.type == TokenType.ASTERISK ||
-           parser.current.type == TokenType.SLASH    ||
-           parser.current.type == TokenType.IS_EQUAL ||
-           parser.current.type == TokenType.NOT_EQUAL) {
-        Token operator = parser.current;
+    while (true) {
+        int prec = util::precedence(parser.current.type);
+        if (prec == 0 || prec < min_prec) {
+            break;
+        }
 
+        Token operator = parser.current;
         consume(parser, context, lexer, operator.type);
 
         Node* left = alloc::new(context.alloc, Node);
         *left = *node;
 
-        Node* right = parse_factor(parser, context, lexer);
-        
+        Node* right = parse_binary(parser, context, lexer, prec + 1);
+
         node = @make_node(context, NodeType.BIN, left.range.from, right.range.to; _node) {
             _node.bin_node.operator = operator;
             _node.bin_node.left     = left;
@@ -327,6 +309,9 @@ fn Node* parse_factor(Parser* parser, CompileContext* context, Lexer* lexer) {
         consume(parser, context, lexer, TokenType.RPAREN);
 
         return node;
+    case TokenType.PLUS:
+    case TokenType.MINUS:
+        node = parse_unary(parser, context, lexer);
     default:
         highlighter::error(context, parser.current.range.start, parser.current.range.end, "Expression expected, got '%s'", parser.current.type);
     }
@@ -510,6 +495,57 @@ fn Node* parse_access(Parser* parser, CompileContext* context, Lexer* lexer) {
     return @make_node(context, NodeType.ACCESS, start, end; node) {
         node.access_node.name = name;
         node.access_node.next = next;
+    };
+}
+
+fn Node* parse_unary(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    Token operator = parser.current;
+    consume(parser, context, lexer, operator.type);
+
+    Node* expr = parse_expr(parser, context, lexer);
+    Range end  = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.UNARY, start, end; node) {
+        node.unary_node.operator = operator;
+        node.unary_node.node     = expr;
+    };
+}
+
+fn Node* parse_if(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.KW_IF);
+    consume(parser, context, lexer, TokenType.LPAREN);
+
+    Node* condition = parse_expr(parser, context, lexer);
+    
+    consume(parser, context, lexer, TokenType.RPAREN);
+
+    NodeList then_statements = parse_compound(parser, context, lexer);
+
+    NodeList else_statements;
+    Node*    else_if         = null;
+
+    if (parser.current.type == TokenType.KW_ELSE) {
+        consume(parser, context, lexer, TokenType.KW_ELSE);
+
+        switch (parser.current.type) {
+        case TokenType.KW_IF:
+            else_if = parse_if(parser, context, lexer);
+        default:
+            else_statements = parse_compound(parser, context, lexer);
+        }
+    }
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.IF, start, end; node) {
+        node.if_node.condition       = condition;
+        node.if_node.then_statements = then_statements;
+        node.if_node.else_statements = else_statements;
+        node.if_node.else_if         = else_if;
     };
 }
 

@@ -86,7 +86,7 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
     case NodeType.EXT:
         generate_ext(generator, context, node);
     case NodeType.CALL:
-        generate_call(generator, context, node);
+        return generate_call(generator, context, node);
     case NodeType.BOOL:
         return generate_bool(generator, context, node);
     case NodeType.STRING:
@@ -101,6 +101,10 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
         break;
     case NodeType.ACCESS:
         return generate_access(generator, context, node);
+    case NodeType.UNARY:
+        return generate_unary(generator, context, node);
+    case NodeType.IF:
+        generate_if(generator, context, node);
     default:
         highlighter::panic("Missing generator function for type '%s'", node.type);
     }
@@ -161,6 +165,8 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
     {
         llvm::build_ret_void(generator.llvm_builder);
     }
+
+    llvm::build_unreachable(generator.llvm_builder);
 }
 
 fn void generate_ret(Generator* generator, CompileContext* context, Node* node, void* data) {
@@ -187,7 +193,7 @@ fn LLVMValueRef generate_int(Generator* generator, CompileContext* context, Node
         }
     }
 
-    return llvm::const_int(int_type, (CULongLong)node.int_node.number.to_int(), llvm::TRUE)!!;
+    return create_int(int_type, node.int_node.number.to_int())!!;
 }
 
 fn void generate_ext(Generator* generator, CompileContext* context, Node* node) => @pool() {
@@ -212,10 +218,14 @@ fn void generate_ext(Generator* generator, CompileContext* context, Node* node) 
     debug::add_function(generator, context, node, llvm_function_value);
 }
 
-fn LLVMValueRef generate_call(Generator* generator, CompileContext* context, Node* node) {
+fn LLVMValueRef generate_call(Generator* generator, CompileContext* context, Node* node) => @pool() {
     String        name          = node.call_node.name.path_node.path;
+    String        full_name     = string::tformat("%s.%s", generator.module_name, name);
     FunctionInfo* function_info = scope::get_function(generator.scope, name);
-
+    if (!function_info) {
+        function_info = context.functions.get(full_name)!!;
+    }
+    
     debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
     List{LLVMValueRef} arguments;
@@ -299,6 +309,7 @@ fn LLVMValueRef generate_string(Generator* generator, CompileContext* context, N
 fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node* node) {
     LLVMValueRef left  = generate_node(generator, context, node.bin_node.left);
     LLVMValueRef right = generate_node(generator, context, node.bin_node.right);
+    String       type  = lookup::get_base_type_group(context.lookup, context.alloc, node.bin_node.left, generator.scope);
 
     debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
@@ -306,7 +317,7 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
     case TokenType.PLUS:
         return llvm::build_add(generator.llvm_builder, left, right, "");
     case TokenType.MINUS:
-        if (lookup::get_base_type_group(context.lookup, context.alloc, node.bin_node.left, generator.scope) == "real") {
+        if (type == "real") {
             return llvm::build_f_sub(generator.llvm_builder, left, right, "");
         }
 
@@ -314,11 +325,35 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
     case TokenType.ASTERISK:
         return llvm::build_mul(generator.llvm_builder, left, right, "");
     case TokenType.SLASH:
-        if (lookup::get_base_type_group(context.lookup, context.alloc, node.bin_node.left, generator.scope) == "real") {
+        if (type == "real") {
             return llvm::build_f_div(generator.llvm_builder, left, right, "");
         }
 
         return llvm::build_s_div(generator.llvm_builder, left, right, "");
+    case TokenType.RANGLE:
+        if (type == "real") {
+            return llvm::build_f_cmp(generator.llvm_builder, LLVMRealPredicate.REAL_OGT, left, right, "");
+        }
+
+        return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_SGT, left, right, "");
+    case TokenType.LANGLE:
+        if (type == "real") {
+            return llvm::build_f_cmp(generator.llvm_builder, LLVMRealPredicate.REAL_OLT, left, right, "");
+        }
+
+        return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_SLT, left, right, "");
+    case TokenType.LTE:
+        if (type == "real") {
+            return llvm::build_f_cmp(generator.llvm_builder, LLVMRealPredicate.REAL_OLE, left, right, "");
+        }
+
+        return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_SLE, left, right, "");
+    case TokenType.IS_EQUAL:
+        if (type == "real") {
+            return llvm::build_f_cmp(generator.llvm_builder, LLVMRealPredicate.REAL_OEQ, left, right, "");
+        }
+
+        return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_EQ, left, right, "");
     default:
         highlighter::panic("Missing generate_bin case for operator type '%s'", node.bin_node.operator.type);
     }
@@ -382,6 +417,79 @@ fn LLVMValueRef generate_access(Generator* generator, CompileContext* context, N
     }
 
     highlighter::panic();
+}
+
+fn LLVMValueRef generate_unary(Generator* generator, CompileContext* context, Node* node) {
+    LLVMValueRef llvm_value = generate_node(generator, context, node.unary_node.node);
+
+    switch (node.unary_node.operator.type) {
+    case TokenType.MINUS:
+        if (lookup::get_base_type_group(context.lookup, context.alloc, node, generator.scope) == "integer") {
+            LLVMTypeRef int_type = context.lookup.get("int").llvm_type!!;
+            
+            return llvm::build_mul(generator.llvm_builder, llvm_value, create_int(int_type, -1), "");
+        }
+
+        highlighter::panic();
+    default:
+        highlighter::panic();
+    }
+}
+
+fn void generate_if(Generator* generator, CompileContext* context, Node* node) {
+    LLVMValueRef condition = generate_node(generator, context, node.if_node.condition);
+
+    LLVMBasicBlockRef current_block = llvm::get_insert_block(generator.llvm_builder);
+    LLVMValueRef      llvm_function = llvm::get_basic_block_parent(current_block);
+
+    LLVMBasicBlockRef then_block = llvm::append_basic_block(llvm_function, "");
+    LLVMBasicBlockRef else_block = llvm::append_basic_block(llvm_function, "");
+    LLVMBasicBlockRef end_block  = llvm::append_basic_block(llvm_function, "");
+
+    llvm::build_cond_br(generator.llvm_builder, condition, then_block, else_block);
+
+    // -- THEN --
+    generator.scope = scope::create(context.alloc, generator.scope);
+
+    llvm::position_builder_at_end(generator.llvm_builder, then_block);
+
+    @todo("remove need to pass data; get function type locally");
+    generate_compound(generator, context, node.if_node.then_statements, null);
+
+    LLVMBasicBlockRef then_end_block = llvm::get_insert_block(generator.llvm_builder);
+    if (!llvm::get_basic_block_terminator(then_end_block)) {
+        llvm::build_br(generator.llvm_builder, end_block);
+    }
+
+    generator.scope = generator.scope.parent;
+
+    llvm::position_builder_at_end(generator.llvm_builder, else_block);
+    if (node.if_node.else_if)
+    {
+        // -- ELSE IF --
+        generate_node(generator, context, node.if_node.else_if);
+
+        LLVMBasicBlockRef else_end_block = llvm::get_insert_block(generator.llvm_builder);
+        if (!llvm::get_basic_block_terminator(else_end_block)) {
+            llvm::build_br(generator.llvm_builder, end_block);
+        }
+    } else
+    {
+        // -- ELSE --
+        generator.scope = scope::create(context.alloc, generator.scope);
+
+        @todo("remove need to pass data; get function type locally");
+        generate_compound(generator, context, node.if_node.else_statements, null);
+
+        LLVMBasicBlockRef else_end_block = llvm::get_insert_block(generator.llvm_builder);
+        if (!llvm::get_basic_block_terminator(else_end_block)) {
+            llvm::build_br(generator.llvm_builder, end_block);
+        }
+
+        generator.scope = generator.scope.parent;
+    }
+
+    llvm::position_builder_at_end(generator.llvm_builder, end_block);
 }
 
 fn LLVMValueRef traverse_access_module(Generator* generator, CompileContext* context, Node* node) => @pool() {
@@ -482,6 +590,10 @@ fn LLVMValueRef get_or_declare_function(Generator* generator, CompileContext* co
     }
 
     return llvm::add_function(generator.llvm_module, (CChar*)name.ptr, function_info.llvm_type);
+}
+
+fn LLVMValueRef create_int(LLVMTypeRef int_type, int value) {
+    return llvm::const_int(int_type, (CULongLong)value, llvm::TRUE);
 }
 
 fn void emit(Generator* generator, CompileContext* context) {

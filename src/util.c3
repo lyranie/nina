@@ -18,6 +18,35 @@ $if $feature(DEBUG):
 $endif
 }
 
+module nina::util;
+
+import nina::types;
+
+fn int precedence(TokenType type) {
+    switch (type) {
+        case TokenType.OR:
+            return 1;
+        case TokenType.AND:
+            return 2;
+        case TokenType.IS_EQUAL:
+        case TokenType.NOT_EQUAL:
+            return 3;
+        case TokenType.LANGLE:
+        case TokenType.RANGLE:
+        case TokenType.LTE:
+        case TokenType.GTE:
+            return 4;
+        case TokenType.PLUS:
+        case TokenType.MINUS:
+            return 5;
+        case TokenType.ASTERISK:
+        case TokenType.SLASH:
+            return 6;
+        default:
+            return 0;
+    }
+}
+
 module llvm;
 
 fn LLVMTypeRef slice_type(LLVMTypeRef base) {

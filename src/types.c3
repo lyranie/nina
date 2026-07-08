@@ -87,6 +87,8 @@ enum TokenType {
     KW_RET,
     KW_EXT,
     KW_USE,
+    KW_IF,
+    KW_ELSE,
 
     SEMI,
     LPAREN,
@@ -194,6 +196,16 @@ struct Node {
             Node* name;
             Node* next;
         }
+        struct unary_node {
+            Token operator;
+            Node* node;
+        }
+        struct if_node {
+            Node*    condition;
+            NodeList then_statements;
+            NodeList else_statements;
+            Node*    else_if;
+        }
     }
 }
 
@@ -214,6 +226,8 @@ enum NodeType {
     VARIABLE,
     USE,
     ACCESS,
+    UNARY,
+    IF,
 }
 
 struct Analyser {

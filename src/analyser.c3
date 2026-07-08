@@ -56,6 +56,10 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
         analyse_use(analyser, context, node);
     case NodeType.ACCESS:
         analyse_access(analyser, context, node);
+    case NodeType.UNARY:
+        analyse_unary(analyser, context, node);
+    case NodeType.IF:
+        analyse_if(analyser, context, node);
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -180,10 +184,12 @@ fn void analyse_ext(Analyser* analyser, CompileContext* context, Node* node) {
     }
 }
 
-fn void analyse_call(Analyser* analyser, CompileContext* context, Node* node) {
-    String name = node.call_node.name.path_node.path;
+fn void analyse_call(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
+    String        name          = node.call_node.name.path_node.path;
+    String        full_name     = string::tformat("%s.%s", analyser.module_name, name);
+    FunctionInfo* function_info = context.functions.get(full_name) ?? scope::get_function(analyser.scope, name);
 
-    handle_call(analyser, context, node, name, analyser.module_name, scope::get_function(analyser.scope, name));
+    handle_call(analyser, context, node, name, analyser.module_name, function_info);
 }
 
 fn void analyse_bin(Analyser* analyser, CompileContext* context, Node* node) {
@@ -291,6 +297,28 @@ fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) 
     }
 }
 
+fn void analyse_unary(Analyser* analyser, CompileContext* context, Node* node) {
+    @todo("check if operator is applickable to expr");
+}
+
+fn void analyse_if(Analyser* analyser, CompileContext* context, Node* node) {
+    @todo("check if condition type is passable");
+
+    analyse_node(analyser, context, node.if_node.condition);
+
+    foreach (Node* statement : node.if_node.then_statements) {
+        analyse_node(analyser, context, statement);
+    }
+
+    foreach (Node* statement : node.if_node.else_statements) {
+        analyse_node(analyser, context, statement);
+    }
+
+    if (node.if_node.else_if) {
+        analyse_node(analyser, context, node.if_node.else_if);
+    }
+}
+
 fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
     String name = node.access_node.name.path_node.path;
     
@@ -349,6 +377,12 @@ fn bool always_returns(Analyser* analyser, CompileContext* context, Node* node) 
         return true;
     case NodeType.FUNCTION:
         return compound_returns(analyser, context, node.function_node.statements);
+    case NodeType.IF:
+        bool then_returns    = compound_returns(analyser, context, node.if_node.then_statements);
+        bool else_returns    = compound_returns(analyser, context, node.if_node.else_statements);
+        bool else_if_returns = node.if_node.else_if ? always_returns(analyser, context, node.if_node.else_if) : true;
+
+        return then_returns && else_returns && else_if_returns;
     default:
         return false;
     }

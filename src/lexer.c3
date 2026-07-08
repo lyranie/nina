@@ -82,40 +82,26 @@ fn void tokenize(Lexer* lexer, CompileContext* context) {
             make_token(lexer, TokenType.GTE, ">=");
         } else if (lexer.current == '<' && peek(lexer) == '=') {
             make_token(lexer, TokenType.LTE, "<=");
-        } else if (lexer.current == ';') {
-            make_token(lexer, TokenType.SEMI, ";");
-        } else if (lexer.current == '(') {
-            make_token(lexer, TokenType.LPAREN, "(");
-        } else if (lexer.current == ')') {
-            make_token(lexer, TokenType.RPAREN, ")");
-        } else if (lexer.current == '[') {
-            make_token(lexer, TokenType.LBRACKET, "[");
-        } else if (lexer.current == ']') {
-            make_token(lexer, TokenType.RBRACKET, "]");
-        } else if (lexer.current == '{') {
-            make_token(lexer, TokenType.LBRACE, "{");
-        } else if (lexer.current == '}') {
-            make_token(lexer, TokenType.RBRACE, "}");
-        } else if (lexer.current == '<') {
-            make_token(lexer, TokenType.LANGLE, "<");
-        } else if (lexer.current == '>') {
-            make_token(lexer, TokenType.RANGLE, ">");
-        } else if (lexer.current == '+') {
-            make_token(lexer, TokenType.PLUS, "+");
-        } else if (lexer.current == '-') {
-            make_token(lexer, TokenType.MINUS, "-");
-        } else if (lexer.current == '*') {
-            make_token(lexer, TokenType.ASTERISK, "*");
-        } else if (lexer.current == '/') {
-            make_token(lexer, TokenType.SLASH, "/");
-        } else if (lexer.current == '=') {
-            make_token(lexer, TokenType.EQUALS, "=");
-        } else if (lexer.current == '.') {
-            make_token(lexer, TokenType.PERIOD, ".");
-        } else if (lexer.current == ',') {
-            make_token(lexer, TokenType.COMMA, ",");
-        } else if (lexer.current == '&') {
-            make_token(lexer, TokenType.AMP, "&");
+        } else {
+            switch (lexer.current) {
+            case ';': make_token(lexer, TokenType.SEMI, ";");
+            case '(': make_token(lexer, TokenType.LPAREN, "(");
+            case ')': make_token(lexer, TokenType.RPAREN, ")");
+            case '[': make_token(lexer, TokenType.LBRACKET, "[");
+            case ']': make_token(lexer, TokenType.RBRACKET, "]");
+            case '{': make_token(lexer, TokenType.LBRACE, "{");
+            case '}': make_token(lexer, TokenType.RBRACE, "}");
+            case '<': make_token(lexer, TokenType.LANGLE, "<");
+            case '>': make_token(lexer, TokenType.RANGLE, ">");
+            case '+': make_token(lexer, TokenType.PLUS, "+");
+            case '-': make_token(lexer, TokenType.MINUS, "-");
+            case '*': make_token(lexer, TokenType.ASTERISK, "*");
+            case '/': make_token(lexer, TokenType.SLASH, "/");
+            case '=': make_token(lexer, TokenType.EQUALS, "=");
+            case '.': make_token(lexer, TokenType.PERIOD, ".");
+            case ',': make_token(lexer, TokenType.COMMA, ",");
+            case '&': make_token(lexer, TokenType.AMP, "&");
+            }
         }
 
         if (!core::range_compare(lexer.range, start_range)) {
@@ -183,20 +169,15 @@ fn void word(Lexer* lexer, CompileContext* context) => @pool() {
 
     TokenType type;
     switch (word.str_view()) {
-    case "mod":
-        type = TokenType.KW_MOD;
-    case "ret":
-        type = TokenType.KW_RET;
-    case "ext":
-        type = TokenType.KW_EXT;
-    case "true":
-        type = TokenType.TRUE;
-    case "false":
-        type = TokenType.FALSE;
-    case "use":
-        type = TokenType.KW_USE;
-    default:
-        type = TokenType.IDENT;
+    case "mod":   type = TokenType.KW_MOD;
+    case "ret":   type = TokenType.KW_RET;
+    case "ext":   type = TokenType.KW_EXT;
+    case "true":  type = TokenType.TRUE;
+    case "false": type = TokenType.FALSE;
+    case "use":   type = TokenType.KW_USE;
+    case "if":    type = TokenType.KW_IF;
+    case "else":  type = TokenType.KW_ELSE;
+    default:      type = TokenType.IDENT;
     }
 
     lexer.context.tokens.push({

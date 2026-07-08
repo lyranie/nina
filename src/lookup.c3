@@ -167,6 +167,13 @@ fn String get_type_name(Lookup* lookup, Allocator alloc, Node* node, Scope* scop
         return get_type_name(lookup, alloc, node.function_node.type, scope);
     case NodeType.BIN:
         return get_type_name(lookup, alloc, node.bin_node.left, scope);
+    case NodeType.UNARY:
+        return get_type_name(lookup, alloc, node.unary_node.node, scope);
+    case NodeType.CALL:
+        String        name          = node.call_node.name.ident_node.name;
+        FunctionInfo* function_info = scope::get_function(scope, name);
+
+        return get_type_name(lookup, alloc, function_info.node, scope);
     default:
         highlighter::panic("Missing get_type_name case for type '%s'", node.type);
     }
@@ -219,6 +226,15 @@ fn String get_base_type_group(Lookup* lookup, Allocator alloc, Node* node, Scope
         return "void";
     case NodeType.BIN:
         return get_base_type_group(lookup, alloc, node.bin_node.left, scope);
+    case NodeType.UNARY:
+        return get_base_type_group(lookup, alloc, node.unary_node.node, scope);
+    case NodeType.CALL:
+        String        name          = node.call_node.name.ident_node.name;
+        FunctionInfo* function_info = scope::get_function(scope, name);
+
+        return get_base_type_group(lookup, alloc, function_info.node, scope);
+    case NodeType.FUNCTION:
+        return get_base_type_group(lookup, alloc, node.function_node.type, scope);
     default:
         highlighter::panic("Missing get_base_type_group case for type '%s'", node.type);
     }
