@@ -105,6 +105,10 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
         return generate_unary(generator, context, node);
     case NodeType.IF:
         generate_if(generator, context, node);
+    case NodeType.STRUCT:
+        generate_struct(generator, context, node);
+    case NodeType.INIT:
+        return generate_init(generator, context, node);
     default:
         highlighter::panic("Missing generator function for type '%s'", node.type);
     }
@@ -411,12 +415,10 @@ fn LLVMValueRef generate_access(Generator* generator, CompileContext* context, N
     String name = path.path_node.path;
 
     if (scope::has_variable(generator.scope, name)) {
-        @todo("generate_access for variable");
+        return traverse_access_variable(generator, context, node);
     } else {
         return traverse_access_module(generator, context, node);
     }
-
-    highlighter::panic();
 }
 
 fn LLVMValueRef generate_unary(Generator* generator, CompileContext* context, Node* node) {
@@ -492,6 +494,60 @@ fn void generate_if(Generator* generator, CompileContext* context, Node* node) {
     llvm::position_builder_at_end(generator.llvm_builder, end_block);
 }
 
+fn void generate_struct(Generator* generator, CompileContext* context, Node* node) => @pool() {
+    String    name      = node.call_node.name.path_node.path;
+    String    full_name = string::tformat("%s.%s", generator.module_name, name);
+    TypeInfo* type_info = scope::get_type(generator.scope, name);
+    if (!type_info) {
+        type_info = context.types.get(full_name)!!;
+    }
+
+    List{LLVMTypeRef} fields;
+    fields.tinit();
+
+    foreach(Node* field : node.struct_node.fields)
+    {
+        fields.push(lookup::get_llvm_type(context.lookup, field.parameter_node.type));
+    }
+
+    LLVMTypeRef llvm_struct_type = type_info.llvm_type;
+    llvm::struct_set_body(llvm_struct_type, fields.to_array(context.alloc), (CUInt)fields.len(), llvm::FALSE);
+}
+
+fn LLVMValueRef generate_init(Generator* generator, CompileContext* context, Node* node) => @pool() {
+    String name      = node.init_node.name.ident_node.name;
+    String full_name = string::tformat("%s.%s", generator.module_name, name);
+
+    List{LLVMValueRef} arguments;
+    arguments.tinit();
+
+    bool constant = true;
+    foreach (Node* argument : node.init_node.arguments) {
+        LLVMValueRef argument_llvm_value = generate_node(generator, context, argument);
+        arguments.push(argument_llvm_value);
+
+        if (!llvm::is_constant(argument_llvm_value)) {
+            constant = false;
+        }
+    }
+
+    TypeInfo*   type_info   = context.types.get(full_name)!!;
+    LLVMTypeRef struct_type = type_info.llvm_type;
+
+    if (constant) {
+        return llvm::const_named_struct(struct_type, arguments.to_array(context.alloc), (CUInt)arguments.len());
+    }
+
+    LLVMValueRef instance = llvm::build_alloca(generator.llvm_builder, struct_type, "");
+    foreach (uint i, LLVMValueRef argument : arguments)
+    {
+        LLVMValueRef field_ptr = llvm::build_struct_gep2(generator.llvm_builder, struct_type, instance, i, "");
+        llvm::build_store(generator.llvm_builder, argument, field_ptr);
+    }
+
+    return instance;
+}
+
 fn LLVMValueRef traverse_access_module(Generator* generator, CompileContext* context, Node* node) => @pool() {
     String name = node.access_node.name.path_node.path;
     
@@ -564,6 +620,37 @@ fn LLVMValueRef traverse_access_module(Generator* generator, CompileContext* con
     default:
         highlighter::panic();
     }
+}
+
+fn LLVMValueRef traverse_access_variable(Generator* generator, CompileContext* context, Node* node) => @pool() {
+    String        name          = node.access_node.name.path_node.path;
+    VariableInfo* variable_info = scope::get_variable(generator.scope, name);
+
+    String    type_name = lookup::get_type_name(context, variable_info.node, generator.scope);
+    String    full_name = string::tformat("%s.%s", generator.module_name, type_name);
+    TypeInfo* type_info = context.types.get(full_name)!!;
+
+    return traverse_access_field(generator, context, node, type_info, variable_info.llvm_value);
+}
+
+fn LLVMValueRef traverse_access_field(Generator* generator, CompileContext* context, Node* node, TypeInfo* type_info, LLVMValueRef instance_ptr) => @pool() {
+    String   field_name = node.access_node.next.ident_node.name;
+    NodeList fields      = lookup::get_type_fields(context, type_info, generator.scope);
+
+    uint  field_index = 0;
+    Node* field_node;
+    foreach (uint i, Node* field : fields) {
+        if (field.parameter_node.name.ident_node.name == field_name) {
+            field_index = i;
+            field_node = field;
+            break;
+        }
+    }
+
+    LLVMTypeRef  field_llvm_type = lookup::get_llvm_type(context.lookup, field_node);
+    LLVMValueRef field_ptr       = llvm::build_struct_gep2(generator.llvm_builder, type_info.llvm_type, instance_ptr, field_index, "");
+
+    return llvm::build_load_2(generator.llvm_builder, field_llvm_type, field_ptr, "");
 }
 
 fn LLVMValueRef get_or_declare_function(Generator* generator, CompileContext* context, FunctionInfo* function_info) {
@@ -649,7 +736,7 @@ fn void emit(Generator* generator, CompileContext* context) {
     }
 }
 
-fn void free(Generator* generator, Allocator alloc) {
+fn void free(Generator* generator, CompileContext* context) {
     scope::free(generator.scope);
 
     llvm::dispose_module(generator.llvm_module);

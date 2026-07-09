@@ -1,5 +1,7 @@
 module nina::core;
 
+import llvm;
+
 import nina::args;
 import nina::types;
 import nina::lookup;
@@ -25,10 +27,11 @@ fn CompileContext* context_create() {
     Allocator       alloc   = alloc_create();
     CompileContext* context = alloc::new(alloc, CompileContext);
 
-    context.alloc    = alloc;
-    context.profiler = profiler::create(alloc);
-    context.args     = args::create(alloc);
-    context.lookup   = lookup::create(alloc);
+    context.alloc        = alloc;
+    context.profiler     = profiler::create(alloc);
+    context.args         = args::create(alloc);
+    context.lookup       = lookup::create(alloc);
+    context.llvm_context = llvm::context_create();
     context.mods.init(alloc);
     context.trees.init(alloc);
     context.functions.init(alloc);
@@ -39,6 +42,7 @@ fn CompileContext* context_create() {
 
 fn void context_free(CompileContext* context) {
     alloc_free();
+    llvm::context_dispose(context.llvm_context);
 }
 
 fn bool range_compare(Range range, Range other) {

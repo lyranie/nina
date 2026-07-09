@@ -79,7 +79,7 @@ fn void main(String[] argv)
         // TODO: free nodes
         // parser::free(parser, context.alloc);
         analyser::free(analyser, context.alloc);
-        generator::free(generator, context.alloc);
+        generator::free(generator, context);
 
     }
 

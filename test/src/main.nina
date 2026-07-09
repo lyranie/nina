@@ -1,5 +1,15 @@
 mod test.main;
 
+use libc;
+
+type Person(char* name, int age);
+
 int main() {
+    Person p = new Person("Allie", 23);
+
+    // libc.printf("%s\n", p);
+    libc.printf("%s\n", p.name);
+    libc.printf("%d\n", p.age);
+
     ret 0;
 }

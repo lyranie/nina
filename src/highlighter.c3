@@ -142,7 +142,7 @@ fn void warn(CompileContext* context, Range from, Range to, String message, args
 
 macro panic(String message = "", args...) @noreturn {
     String location     = string::tformat("%s(%d)", $$FILE, $$LINE);
-    String line         = string::tformat("Error in file %s", location);
+    String line         = string::tformat("Error in file %s (%s)", location, $$FUNC);
     String message_line = string::tformat(message, ...args);
     int    pad          = 60 - line.len - 1;
     int    message_pad  = 60 - message_line.len - 1;

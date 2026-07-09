@@ -5,6 +5,7 @@ import llvm;
 import nina::types;
 import nina::lookup;
 
+import std::io;
 import std::collections::list;
 
 fn void register(CompileContext* context, Parser* parser) {
@@ -13,10 +14,38 @@ fn void register(CompileContext* context, Parser* parser) {
 
     context.modules.set(context.current_file, llvm_module);
 
-    register_node(context, context.trees.get(context.current_file))!!;
+    register_types(context, context.trees.get(context.current_file))!!;
+    register_functions(context, context.trees.get(context.current_file))!!;
 }
 
-fn void register_node(CompileContext* context, Node* node) {
+fn void register_types(CompileContext* context, Node* node) {
+    switch (node.type) {
+    case NodeType.STRUCT:
+        String mod_name  = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
+        String type_name = node.struct_node.name.ident_node.name;
+        String name      = string::format(context.alloc, "%s.%s", mod_name, type_name);
+        
+        LLVMTypeRef llvm_struct_type = llvm::struct_create_named(context.llvm_context, (CChar*)name.ptr);
+
+        TypeInfo* type_info = alloc::new(context.alloc, TypeInfo);
+        type_info.mod        = mod_name;
+        type_info.file       = context.current_file;
+        type_info.node       = node;
+        type_info.llvm_type  = llvm_struct_type;
+
+        context.types.set(name, type_info);
+
+        lookup::register_type(context.lookup, context.alloc, type_name, context.current_file, node, llvm_struct_type);
+    case NodeType.MOD:
+        foreach (Node* statement : node.mod_node.statements) {
+            register_types(context, statement);
+        }
+    default:
+        break;
+    }
+}
+
+fn void register_functions(CompileContext* context, Node* node) {
     switch (node.type) {
     case NodeType.FUNCTION:
         String mod_name = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
@@ -88,7 +117,7 @@ fn void register_node(CompileContext* context, Node* node) {
         context.functions.set(name, function_info);
     case NodeType.MOD:
         foreach (Node* statement : node.mod_node.statements) {
-            register_node(context, statement);
+            register_functions(context, statement);
         }
     default:
         break;

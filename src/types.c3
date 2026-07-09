@@ -9,6 +9,7 @@ import std::time;
 alias TokenList  = List{Token};
 alias StringList = List{String};
 alias NodeList   = List{Node*};
+alias TypeList   = List{TypeInfo*};
 
 const Token TOKEN_EMPTY = {};
 
@@ -42,6 +43,8 @@ struct CompileContext {
     HashMap{String, Node*}         trees;
     HashMap{String, FunctionInfo*} functions;
     HashMap{String, LLVMModuleRef} modules;
+    HashMap{String, TypeInfo*}     types;
+    LLVMContextRef*                llvm_context;
 }
 
 struct Range {
@@ -89,6 +92,8 @@ enum TokenType {
     KW_USE,
     KW_IF,
     KW_ELSE,
+    KW_TYPE,
+    KW_NEW,
 
     SEMI,
     LPAREN,
@@ -206,6 +211,14 @@ struct Node {
             NodeList else_statements;
             Node*    else_if;
         }
+        struct struct_node {
+            Node*    name;
+            NodeList fields;
+        }
+        struct init_node {
+            Node*    name;
+            NodeList arguments;
+        }
     }
 }
 
@@ -228,6 +241,8 @@ enum NodeType {
     ACCESS,
     UNARY,
     IF,
+    STRUCT,
+    INIT,
 }
 
 struct Analyser {
@@ -240,6 +255,7 @@ struct Scope {
     Scope*                         parent;
     HashMap{String, FunctionInfo*} functions;
     HashMap{String, VariableInfo*} variables;
+    HashMap{String, TypeInfo*}     types;
 }
 
 struct FunctionInfo {
@@ -252,6 +268,14 @@ struct FunctionInfo {
 
 struct VariableInfo {
     String       name;
+    Node*        node;
+    LLVMTypeRef  llvm_type;
+    LLVMValueRef llvm_value;
+}
+
+struct TypeInfo {
+    String       mod;
+    String       file;
     Node*        node;
     LLVMTypeRef  llvm_type;
     LLVMValueRef llvm_value;

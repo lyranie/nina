@@ -177,6 +177,8 @@ fn void word(Lexer* lexer, CompileContext* context) => @pool() {
     case "use":   type = TokenType.KW_USE;
     case "if":    type = TokenType.KW_IF;
     case "else":  type = TokenType.KW_ELSE;
+    case "type":  type = TokenType.KW_TYPE;
+    case "new":   type = TokenType.KW_NEW;
     default:      type = TokenType.IDENT;
     }
 

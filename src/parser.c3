@@ -43,6 +43,8 @@ fn void parse_mod(Parser* parser, CompileContext* context, Lexer* lexer) {
             statements.push(parse_ext(parser, context, lexer));
         case TokenType.KW_USE:
             statements.push(parse_use(parser, context, lexer));
+        case TokenType.KW_TYPE:
+            statements.push(parse_struct(parser, context, lexer));
         default:
             highlighter::error(context, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
         }
@@ -312,6 +314,8 @@ fn Node* parse_factor(Parser* parser, CompileContext* context, Lexer* lexer) {
     case TokenType.PLUS:
     case TokenType.MINUS:
         node = parse_unary(parser, context, lexer);
+    case TokenType.KW_NEW:
+        node = parse_init(parser, context, lexer);
     default:
         highlighter::error(context, parser.current.range.start, parser.current.range.end, "Expression expected, got '%s'", parser.current.type);
     }
@@ -546,6 +550,77 @@ fn Node* parse_if(Parser* parser, CompileContext* context, Lexer* lexer) {
         node.if_node.then_statements = then_statements;
         node.if_node.else_statements = else_statements;
         node.if_node.else_if         = else_if;
+    };
+}
+
+fn Node* parse_struct(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.KW_TYPE);
+    
+    Node*    name   = parse_identifier(parser, context, lexer);
+    NodeList fields = parse_fields(parser, context, lexer);
+
+    consume(parser, context, lexer, TokenType.SEMI);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.STRUCT, start, end; node) {
+        node.struct_node.name   = name;
+        node.struct_node.fields = fields;
+    };
+}
+
+fn NodeList parse_fields(Parser* parser, CompileContext* context, Lexer* lexer) {
+    NodeList fields;
+    fields.init(context.alloc);
+
+    consume(parser, context, lexer, TokenType.LPAREN);
+    
+    if (parser.current.type != TokenType.RPAREN) {
+        Range field_start = parser.current.range.start;
+        Node* field_type  = parse_type(parser, context, lexer);
+        Node* field_name  = parse_identifier(parser, context, lexer);
+        Range field_end   = peek(parser, lexer, -1).range.end;
+
+        fields.push(@make_node(context, NodeType.PARAMETER, field_start, field_end; node) {
+            node.parameter_node.type  = field_type;
+            node.parameter_node.name  = field_name;
+        });
+
+        while (parser.current.type == TokenType.COMMA) {
+            consume(parser, context, lexer, TokenType.COMMA);
+
+            Range other_field_start = parser.current.range.start;
+            Node* other_field_type  = parse_type(parser, context, lexer);
+            Node* other_field_name  = parse_identifier(parser, context, lexer);
+            Range other_field_end   = peek(parser, lexer, -1).range.end;
+
+            fields.push(@make_node(context, NodeType.PARAMETER, other_field_start, other_field_end; node) {
+                node.parameter_node.type  = other_field_type;
+                node.parameter_node.name  = other_field_name;
+            });
+        }
+    }
+
+    consume(parser, context, lexer, TokenType.RPAREN);
+
+    return fields;
+}
+
+fn Node* parse_init(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.KW_NEW);
+
+    Node*    name      = parse_identifier(parser, context, lexer);
+    NodeList arguments = parse_arguments(parser, context, lexer);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.INIT, start, end; node) {
+        node.init_node.name      = name;
+        node.init_node.arguments = arguments;
     };
 }
 

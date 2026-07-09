@@ -190,7 +190,7 @@ fn String get_type_name(CompileContext* context, Node* node, Scope* scope) {
 
         if (scope::has_variable(scope, name)) {
             @todo("get_type_name_access for variable");
-            highlighter::panic();
+            highlighter::panic("get_type_name_access for variable");
         } else {
             return traverse_access_module(context, node, scope);
         }
@@ -223,8 +223,10 @@ fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope)
             return "integer";
         case LLVMTypeKind.POINTER_TYPE_KIND:
             return "pointer";
+        case LLVMTypeKind.STRUCT_TYPE_KIND:
+            return "struct";
         default:
-            highlighter::panic("Missing get_base_type_goup#TYPE case for type kind '%s'", llvm_type_kind);
+            highlighter::panic("Missing get_base_type_group#TYPE case for type kind '%s'", llvm_type_kind);
         }
     case NodeType.INT:
         return "integer";
@@ -271,12 +273,21 @@ fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope)
 
         if (scope::has_variable(scope, name)) {
             @todo("get_type_name_access for variable");
-            highlighter::panic();
+            highlighter::panic("get_type_name_access for variable");
         } else {
             return traverse_access_module_base_group(context, node, scope);
         }
     default:
         highlighter::panic("Missing get_base_type_group case for type '%s'", node.type);
+    }
+}
+
+fn NodeList get_type_fields(CompileContext* context, TypeInfo* type_info, Scope* scope) {
+    switch (type_info.node.type) {
+    case NodeType.STRUCT:
+        return type_info.node.struct_node.fields;
+    default:
+        highlighter::panic();
     }
 }
 

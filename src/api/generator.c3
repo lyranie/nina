@@ -12,5 +12,5 @@ fn void generator_generate(CompileContext* context, Generator* generator) @expor
 }
 
 fn void generator_free(CompileContext* context, Generator* generator) @export("nina_generator_free") {
-    generator::free(generator, context.alloc);
+    generator::free(generator, context);
 }

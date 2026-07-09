@@ -10,6 +10,7 @@ fn Scope* create(Allocator alloc, Scope* parent = null) {
     scope.parent = parent;
     scope.functions.init(alloc);
     scope.variables.init(alloc);
+    scope.types.init(alloc);
 
     return scope;
 }
@@ -86,6 +87,43 @@ fn FunctionInfo* get_function(Scope* scope, String name) {
 
     if (scope.parent) {
         return get_function(scope.parent, name);
+    }
+
+    return null;
+}
+
+// -- TYPE --
+fn void add_type(Scope* scope, Allocator alloc, String name, String mod, String file, Node* node, LLVMTypeRef llvm_type = null, LLVMValueRef llvm_value = null) {
+    TypeInfo* type = alloc::new(alloc, TypeInfo);
+
+    type.mod        = mod;
+    type.file       = file;
+    type.node       = node;
+    type.llvm_type  = llvm_type;
+    type.llvm_value = llvm_value;
+
+    scope.types.set(name, type);
+}
+
+fn bool has_type(Scope* scope, String name) {
+    if (scope.types.has_key(name)) {
+        return true;
+    }
+
+    if (scope.parent) {
+        return has_type(scope.parent, name);
+    }
+
+    return false;
+}
+
+fn TypeInfo* get_type(Scope* scope, String name) {
+    if (scope.types.has_key(name)) {
+        return scope.types.get(name)!!;
+    }
+
+    if (scope.parent) {
+        return get_type(scope.parent, name);
     }
 
     return null;

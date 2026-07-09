@@ -60,6 +60,10 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
         analyse_unary(analyser, context, node);
     case NodeType.IF:
         analyse_if(analyser, context, node);
+    case NodeType.STRUCT:
+        analyse_struct(analyser, context, node);
+    case NodeType.INIT:
+        analyse_init(analyser, context, node);
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -281,7 +285,7 @@ fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) 
     String name = path.path_node.path;
 
     if (scope::has_variable(analyser.scope, name)) {
-        @todo("analyse_access for variable");
+        traverse_access_variable(analyser, context, node);
     } else {
         bool module_found = false;
 
@@ -319,6 +323,79 @@ fn void analyse_if(Analyser* analyser, CompileContext* context, Node* node) {
 
     if (node.if_node.else_if) {
         analyse_node(analyser, context, node.if_node.else_if);
+    }
+}
+
+fn void analyse_struct(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
+    String name = node.struct_node.name.ident_node.name;
+
+    if (scope::has_type(analyser.scope, name)) {
+        TypeInfo* prev = scope::get_type(analyser.scope, name);
+        
+        highlighter::note(context, prev.node.range.from, prev.node.range.to, "Previous definition was here");
+        highlighter::error(context, node.range.from, node.range.to, "Type '%s' already defined", name);
+    }
+
+    scope::add_type(analyser.scope, context.alloc, name, analyser.module_name, context.current_file, node);
+
+    HashMap{String, Node*} fields;
+    fields.tinit();
+
+    foreach (Node* field : node.struct_node.fields) {
+        analyse_node(analyser, context, field.parameter_node.type);
+
+        String field_name = field.parameter_node.name.ident_node.name;
+
+        if (fields.has_key(field_name)) {
+            Node* prev = fields.get(field_name)!!;
+
+            highlighter::note(context, prev.range.from, prev.range.to, "Previous definition was here");
+            highlighter::error(context, field.range.from, field.range.to, "Field '%s' already defined", field_name);
+        }
+
+        fields.set(field_name, field);
+    }
+}
+
+fn void analyse_init(Analyser* analyser, CompileContext* context, Node* node) {
+    String name = node.struct_node.name.ident_node.name;
+
+    if (!scope::has_type(analyser.scope, name)) {
+        highlighter::error(context, node.range.from, node.range.to, "Could not find type '%s'", name);
+    }
+
+    TypeInfo* type_info = scope::get_type(analyser.scope, name);
+    NodeList  fields    = type_info.node.struct_node.fields;
+
+    int arguments_len = (int)node.init_node.arguments.len();
+    int fields_len    = (int)fields.len();
+    
+    if (arguments_len < fields_len) {
+        highlighter::note(context, type_info.node.range.from, type_info.node.range.to, "Definition was here");
+        highlighter::error(context, node.range.from, node.range.to, "Expected more arguments");
+    }
+
+    if (arguments_len > fields_len) {
+        Node* argument = node.init_node.arguments[(long)arguments_len - 1];
+
+        highlighter::error(context, argument.range.from, argument.range.to, "Expected less arguments");
+    }
+
+    foreach (int i, Node* argument : node.init_node.arguments) {
+        if (i >= fields_len) {
+            break;
+        }
+
+        Node* field = fields[i];
+
+        analyse_node(analyser, context, argument);
+
+        if (!lookup::compare_type(context, field, argument, analyser.scope)) {
+            String field_type    = lookup::get_type_name(context, field, analyser.scope);
+            String argument_type = lookup::get_type_name(context, argument, analyser.scope);
+
+            highlighter::error(context, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", field_type, argument_type);
+        }
     }
 }
 
@@ -371,6 +448,47 @@ fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node
 
     if (!context.functions.has_key(full_name.str_view())) {
         highlighter::error(context, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", function_name, module_name);
+    }
+}
+
+fn void traverse_access_variable(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
+    String        name          = node.access_node.name.path_node.path;
+    VariableInfo* variable_info = scope::get_variable(analyser.scope, name);
+    
+    if (lookup::get_base_type_group(context, variable_info.node, analyser.scope) != "struct") {
+        highlighter::panic();
+    }
+
+    String    type_name   = lookup::get_type_name(context, variable_info.node, analyser.scope);
+    String    full_name   = string::tformat("%s.%s", analyser.module_name, type_name);
+    TypeInfo* type_info   = context.types.get(full_name)!!;
+    traverse_access_field(analyser, context, node, type_info);
+}
+
+fn void traverse_access_field(Analyser* analyser, CompileContext* context, Node* node, TypeInfo* type_info) => @pool() {
+    String name = node.access_node.name.path_node.path;
+
+    switch (node.access_node.next.type) {
+    case NodeType.IDENT:
+        break;
+    default:
+        highlighter::panic("traverse_access_field#access");
+    }
+
+    String   field_name = node.access_node.next.ident_node.name;
+    NodeList fields     = lookup::get_type_fields(context, type_info, analyser.scope);
+    String   field_type = lookup::get_type_name(context, node.access_node.name, analyser.scope);
+
+    Node* field_node;
+    foreach (Node* field : fields) {
+        if (field.parameter_node.name.ident_node.name == field_name) {
+            field_node = field;
+            break;
+        }
+    }
+
+    if (!field_node) {
+        highlighter::error(context, node.range.from, node.range.to, "Could not find field '%s' on type '%s'", field_name, field_type);
     }
 }
 
