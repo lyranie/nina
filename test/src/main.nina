@@ -1,15 +1,25 @@
 mod test.main;
 
 use libc;
+use other;
 
 type Person(char* name, int age);
 
 int main() {
-    Person p = new Person("Allie", 23);
+    other.Person p = other.test();
+    other.Person q = new other.Person("Allie", 23);
+
+    Person s = new Person("Nina", 34);
 
     // libc.printf("%s\n", p);
     libc.printf("%s\n", p.name);
     libc.printf("%d\n", p.age);
+
+    libc.printf("%s\n", q.name);
+    libc.printf("%d\n", q.age);
+    
+    libc.printf("%s\n", s.name);
+    libc.printf("%d\n", s.age);
 
     ret 0;
 }

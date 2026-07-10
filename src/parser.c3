@@ -103,7 +103,7 @@ fn Node* parse_function(Parser* parser, CompileContext* context, Lexer* lexer) {
 
 fn Node* parse_type(Parser* parser, CompileContext* context, Lexer* lexer) => @pool() {
     Range start = parser.current.range.start;
-    Node* name  = parse_identifier(parser, context, lexer);
+    Node* name  = parse_path(parser, context, lexer);
 
     DString suffix;
     suffix.tinit();
@@ -357,6 +357,8 @@ fn Node* parse_ext(Parser* parser, CompileContext* context, Lexer* lexer) {
 }
 
 fn Node* parse_identifier_statement(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Mark mark_start = save(parser);
+
     switch (peek(parser, lexer).type) {
     case TokenType.LPAREN:
         Node* node = parse_call(parser, context, lexer);
@@ -365,8 +367,15 @@ fn Node* parse_identifier_statement(Parser* parser, CompileContext* context, Lex
 
         return node;
     case TokenType.PERIOD:
+        if (is_qualified_type_ident(parser, context, lexer)) {
+            return parse_variable(parser, context, lexer);
+        }
+
+        parser.cursor  = mark_start.cursor;
+        parser.current = mark_start.current;
+
         Node* node = parse_access(parser, context, lexer);
-        
+
         consume(parser, context, lexer, TokenType.SEMI);
 
         return node;
@@ -613,7 +622,7 @@ fn Node* parse_init(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     consume(parser, context, lexer, TokenType.KW_NEW);
 
-    Node*    name      = parse_identifier(parser, context, lexer);
+    Node*    name      = parse_path(parser, context, lexer);
     NodeList arguments = parse_arguments(parser, context, lexer);
 
     Range end = peek(parser, lexer, -1).range.end;
@@ -640,6 +649,37 @@ fn Token peek(Parser* parser, Lexer* lexer, int count = 1) {
     }
 
     return lexer.context.tokens[(long)parser.cursor + count];
+}
+
+fn Mark save(Parser* parser) {
+    return { parser.cursor, parser.current };
+}
+
+fn void restore(Parser* parser, Mark mark) {
+    parser.cursor  = mark.cursor;
+    parser.current = mark.current;
+}
+
+fn bool is_qualified_type_ident(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Mark mark = save(parser);
+
+    consume(parser, context, lexer, TokenType.IDENT);
+
+    while (parser.current.type == TokenType.PERIOD) {
+        consume(parser, context, lexer, TokenType.PERIOD);
+
+        if (parser.current.type != TokenType.IDENT) {
+            restore(parser, mark);
+            return false;
+        }
+
+        consume(parser, context, lexer, TokenType.IDENT);
+    }
+
+    bool result = parser.current.type == TokenType.IDENT;
+
+    restore(parser, mark);
+    return result;
 }
 
 macro Node* @make_node(CompileContext* context, NodeType type, Range from, Range to; @body(Node*)) {

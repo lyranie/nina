@@ -135,10 +135,10 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
     parameters.free();
 }
 
-fn void analyse_type(Analyser* analyser, CompileContext* context, Node* node) {
-    String name = node.type_node.name.ident_node.name;
+fn void analyse_type(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
+    String name = node.type_node.name.path_node.path;
 
-    if (!context.lookup.has_key(name)) {
+    if (!(context.lookup.has_key(name) || context.types.has_key(name))) {
         highlighter::error(context, node.range.from, node.range.to, "Could not find type '%s'", name);
     }
 }
@@ -234,6 +234,13 @@ fn void analyse_variable(Analyser* analyser, CompileContext* context, Node* node
 
     if (node.variable_node.value) {
         analyse_node(analyser, context, node.variable_node.value);
+
+        if (!lookup::compare_type(context, node, node.variable_node.value, analyser.scope)) {
+            String variable_type = lookup::get_type_name(context, node, analyser.scope);
+            String value_type    = lookup::get_type_name(context, node.variable_node.value, analyser.scope);
+
+            highlighter::error(context, node.variable_node.value.range.from, node.variable_node.value.range.to, "Expected type '%s', got '%s'", variable_type, value_type);
+        }
 
         @todo("check if value type matches variable type");
     }
@@ -358,13 +365,13 @@ fn void analyse_struct(Analyser* analyser, CompileContext* context, Node* node) 
 }
 
 fn void analyse_init(Analyser* analyser, CompileContext* context, Node* node) {
-    String name = node.struct_node.name.ident_node.name;
+    String name = node.struct_node.name.path_node.path;
 
-    if (!scope::has_type(analyser.scope, name)) {
+    if (!(context.lookup.has_key(name) || context.types.has_key(name))) {
         highlighter::error(context, node.range.from, node.range.to, "Could not find type '%s'", name);
     }
 
-    TypeInfo* type_info = scope::get_type(analyser.scope, name);
+    TypeInfo* type_info = context.types.get(name) ?? scope::get_type(analyser.scope, name);
     NodeList  fields    = type_info.node.struct_node.fields;
 
     int arguments_len = (int)node.init_node.arguments.len();
@@ -454,14 +461,15 @@ fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node
 fn void traverse_access_variable(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
     String        name          = node.access_node.name.path_node.path;
     VariableInfo* variable_info = scope::get_variable(analyser.scope, name);
-    
+
     if (lookup::get_base_type_group(context, variable_info.node, analyser.scope) != "struct") {
         highlighter::panic();
     }
 
-    String    type_name   = lookup::get_type_name(context, variable_info.node, analyser.scope);
-    String    full_name   = string::tformat("%s.%s", analyser.module_name, type_name);
-    TypeInfo* type_info   = context.types.get(full_name)!!;
+    String    type_name      = lookup::get_type_name(context, variable_info.node, analyser.scope);
+    String    qualified_name = type_name.contains(".") ? type_name : string::tformat("%s.%s", analyser.module_name, type_name);
+    TypeInfo* type_info      = context.types.get(qualified_name) ?? scope::get_type(analyser.scope, type_name);
+
     traverse_access_field(analyser, context, node, type_info);
 }
 

@@ -8,6 +8,7 @@ import nina::highlighter;
 
 import std::io;
 import std::os;
+import std::collections::list;
 
 fn Lookup* create(Allocator alloc) {
     Lookup* lookup = alloc::new(alloc, Lookup);
@@ -35,13 +36,21 @@ fn void register_type(Lookup* lookup, Allocator alloc, String name, String filep
     lookup.set(name, type);
 }
 
-fn LLVMTypeRef get_llvm_type(Lookup* lookup, Node* node) {
+fn LLVMTypeRef get_llvm_type(CompileContext* context, Node* node) {
     switch (node.type) {
     case NodeType.TYPE:
         String type_name   = node.type_node.name.ident_node.name;
         String type_suffix = node.type_node.suffix;
 
-        LLVMTypeRef llvm_type = lookup.get(type_name).llvm_type!!;
+        // if type from other module
+        Type*?      type      = context.lookup.get(type_name);
+        TypeInfo*?  type_info = context.types.get(type_name);
+        LLVMTypeRef llvm_type;
+        if (try type) {
+            llvm_type = type.llvm_type;
+        } else {
+            llvm_type = type_info.llvm_type!!;
+        }
 
         while (type_suffix.ends_with("*") || type_suffix.ends_with("[]")) {
             switch (type_suffix[type_suffix.len - 1]) {
@@ -54,18 +63,35 @@ fn LLVMTypeRef get_llvm_type(Lookup* lookup, Node* node) {
             }
         }
 
+        if (llvm::get_type_kind(llvm_type) == LLVMTypeKind.STRUCT_TYPE_KIND && llvm::is_opaque_struct(llvm_type)) {
+            List{LLVMTypeRef} llvm_fields;
+            llvm_fields.tinit();
+            
+            NodeList fields;
+            if (try type) {
+                fields = type.node.struct_node.fields;
+            } else {
+                fields = type_info.node.struct_node.fields!!;
+            }
+            foreach (Node* field : fields) {
+                llvm_fields.push(get_llvm_type(context, field.parameter_node.type));
+            }
+
+            llvm::struct_set_body(llvm_type, llvm_fields.to_array(context.alloc), (CUInt)llvm_fields.len(), llvm::FALSE);
+        }
+
         return llvm_type;
     case NodeType.PARAMETER:
-        return get_llvm_type(lookup, node.parameter_node.type);
+        return get_llvm_type(context, node.parameter_node.type);
     case NodeType.VARIABLE:
-        return get_llvm_type(lookup, node.variable_node.type);
+        return get_llvm_type(context, node.variable_node.type);
     default:
         io::eprintfn("Missing get_llvm_type case for type '%s'", node.type);
         os::exit(1);
     }
 }
 
-fn LLVMMetadataRef get_llvm_debug_type(Allocator alloc, Generator* generator, Lookup* lookup, Node* node) {
+fn LLVMMetadataRef get_llvm_debug_type(Allocator alloc, Generator* generator, Lookup* lookup, Node* node) => @pool() {
     switch (node.type) {
     case NodeType.TYPE:
         String type_name   = node.type_node.name.ident_node.name;
@@ -147,7 +173,7 @@ fn String get_type_name(CompileContext* context, Node* node, Scope* scope) {
 
         return "any";
     case NodeType.TYPE:
-        String type_name   = node.type_node.name.ident_node.name;
+        String type_name   = node.type_node.name.path_node.path;
         String type_suffix = node.type_node.suffix;
 
         return string::format(context.alloc, "%s%s", type_name, type_suffix);
@@ -182,8 +208,9 @@ fn String get_type_name(CompileContext* context, Node* node, Scope* scope) {
     case NodeType.CALL:
         String        name          = node.call_node.name.ident_node.name;
         FunctionInfo* function_info = scope::get_function(scope, name);
+        String        type_name     = get_type_name(context, function_info.node, scope);
 
-        return get_type_name(context, function_info.node, scope);
+        return type_name.contains(".") ? type_name : string::tformat("%s.%s", function_info.mod, type_name);
     case NodeType.ACCESS:
         Node*  path = node.access_node.name;
         String name = path.path_node.path;
@@ -194,6 +221,8 @@ fn String get_type_name(CompileContext* context, Node* node, Scope* scope) {
         } else {
             return traverse_access_module(context, node, scope);
         }
+    case NodeType.INIT:
+        return node.init_node.name.path_node.path;
     default:
         highlighter::panic("Missing get_type_name case for type '%s'", node.type);
     }
@@ -209,7 +238,7 @@ fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope)
         return "anytype";
     case NodeType.TYPE:
         String       type_name      = node.type_node.name.ident_node.name;
-        LLVMTypeRef  llvm_type      = get_llvm_type(context.lookup, node);
+        LLVMTypeRef  llvm_type      = get_llvm_type(context, node);
         LLVMTypeKind llvm_type_kind = llvm::get_type_kind(llvm_type);
 
         switch (llvm_type_kind) {
@@ -277,6 +306,8 @@ fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope)
         } else {
             return traverse_access_module_base_group(context, node, scope);
         }
+    case NodeType.INIT:
+        return node.init_node.name.path_node.path;
     default:
         highlighter::panic("Missing get_base_type_group case for type '%s'", node.type);
     }
@@ -337,7 +368,9 @@ fn String traverse_access_module(CompileContext* context, Node* node, Scope* sco
                 highlighter::panic();
             }
 
-            return get_type_name(context, type_node, scope);
+            String type_name = get_type_name(context, type_node, scope);
+
+            return type_name.contains(".") ? type_name : string::format(context.alloc, "%s.%s", module_name, type_name);
         default:
             highlighter::panic();
         }

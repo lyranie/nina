@@ -151,7 +151,7 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
 
     foreach (CUInt index, Node* parameter : node.function_node.parameters) {
         String       parameter_name       = parameter.parameter_node.name.ident_node.name;
-        LLVMTypeRef  llvm_parameter_type  = lookup::get_llvm_type(context.lookup, parameter);
+        LLVMTypeRef  llvm_parameter_type  = lookup::get_llvm_type(context, parameter);
         LLVMValueRef llvm_parameter_value = llvm::get_param(function_info.llvm_value, index);
 
         LLVMValueRef alloca = llvm::build_alloca(generator.llvm_builder, llvm_parameter_type, "");
@@ -193,7 +193,7 @@ fn LLVMValueRef generate_int(Generator* generator, CompileContext* context, Node
     if (data) {
         Node* parameter_type = data;
         if (!parameter_type.parameter_node.vaarg) {
-            int_type = lookup::get_llvm_type(context.lookup, parameter_type);
+            int_type = lookup::get_llvm_type(context, parameter_type);
         }
     }
 
@@ -372,8 +372,8 @@ fn LLVMValueRef generate_ident(Generator* generator, CompileContext* context, No
 }
 
 fn LLVMValueRef generate_variable(Generator* generator, CompileContext* context, Node* node) {
-    String       name        = node.variable_node.name.ident_node.name;
-    LLVMTypeRef  llvm_type   = lookup::get_llvm_type(context.lookup, node);
+    String       name        = node.variable_node.name.path_node.path;
+    LLVMTypeRef  llvm_type   = lookup::get_llvm_type(context, node);
 
     debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
@@ -507,15 +507,18 @@ fn void generate_struct(Generator* generator, CompileContext* context, Node* nod
 
     foreach(Node* field : node.struct_node.fields)
     {
-        fields.push(lookup::get_llvm_type(context.lookup, field.parameter_node.type));
+        fields.push(lookup::get_llvm_type(context, field.parameter_node.type));
     }
+
+    String global_name = string::format(context.alloc, "__keep_%s", full_name);
 
     LLVMTypeRef llvm_struct_type = type_info.llvm_type;
     llvm::struct_set_body(llvm_struct_type, fields.to_array(context.alloc), (CUInt)fields.len(), llvm::FALSE);
+    llvm::add_global(generator.llvm_module, llvm_struct_type, (CChar*)global_name.ptr);
 }
 
 fn LLVMValueRef generate_init(Generator* generator, CompileContext* context, Node* node) => @pool() {
-    String name      = node.init_node.name.ident_node.name;
+    String name      = node.init_node.name.path_node.path;
     String full_name = string::tformat("%s.%s", generator.module_name, name);
 
     List{LLVMValueRef} arguments;
@@ -531,7 +534,13 @@ fn LLVMValueRef generate_init(Generator* generator, CompileContext* context, Nod
         }
     }
 
-    TypeInfo*   type_info   = context.types.get(full_name)!!;
+    TypeInfo* type_info;
+    if (name.contains(".")) {
+        type_info = context.types.get(name) ?? scope::get_type(generator.scope, name);
+    } else {
+        type_info = context.types.get(full_name) ?? scope::get_type(generator.scope, name);
+    }
+
     LLVMTypeRef struct_type = type_info.llvm_type;
 
     if (constant) {
@@ -626,9 +635,9 @@ fn LLVMValueRef traverse_access_variable(Generator* generator, CompileContext* c
     String        name          = node.access_node.name.path_node.path;
     VariableInfo* variable_info = scope::get_variable(generator.scope, name);
 
-    String    type_name = lookup::get_type_name(context, variable_info.node, generator.scope);
-    String    full_name = string::tformat("%s.%s", generator.module_name, type_name);
-    TypeInfo* type_info = context.types.get(full_name)!!;
+    String    type_name      = lookup::get_type_name(context, variable_info.node, generator.scope);
+    String    qualified_name = type_name.contains(".") ? type_name : string::tformat("%s.%s", generator.module_name, type_name);
+    TypeInfo* type_info      = context.types.get(qualified_name) ?? scope::get_type(generator.scope, name);
 
     return traverse_access_field(generator, context, node, type_info, variable_info.llvm_value);
 }
@@ -647,7 +656,7 @@ fn LLVMValueRef traverse_access_field(Generator* generator, CompileContext* cont
         }
     }
 
-    LLVMTypeRef  field_llvm_type = lookup::get_llvm_type(context.lookup, field_node);
+    LLVMTypeRef  field_llvm_type = lookup::get_llvm_type(context, field_node);
     LLVMValueRef field_ptr       = llvm::build_struct_gep2(generator.llvm_builder, type_info.llvm_type, instance_ptr, field_index, "");
 
     return llvm::build_load_2(generator.llvm_builder, field_llvm_type, field_ptr, "");

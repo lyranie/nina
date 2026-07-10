@@ -130,6 +130,11 @@ struct Parser {
     }
 }
 
+struct Mark {
+    int   cursor;
+    Token current;
+}
+
 struct Node {
     NodeType type;
     struct range {

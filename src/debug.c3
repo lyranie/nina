@@ -67,7 +67,7 @@ fn LLVMValueRef add_parameter(Generator* generator, CompileContext* context, Nod
     String          parameter_name  = parameter.parameter_node.name.ident_node.name;
     LLVMMetadataRef llvm_subprogram = llvm::get_subprogram(llvm_function_value);
     LLVMMetadataRef llvm_debug_type = lookup::get_llvm_debug_type(context.alloc, generator, context.lookup, parameter);
-    LLVMTypeRef     llvm_type       = lookup::get_llvm_type(context.lookup, parameter);
+    LLVMTypeRef     llvm_type       = lookup::get_llvm_type(context, parameter);
     CUInt           line            = (CUInt)parameter.range.from.line;
 
     LLVMValueRef llvm_alloca = llvm::build_alloca(generator.llvm_builder, llvm_type, (CChar*)parameter_name.ptr);

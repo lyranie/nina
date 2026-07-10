@@ -1,0 +1,7 @@
+mod other;
+
+type Person(char* name, int age);
+
+Person test() {
+    ret new Person("Christoffer Lerno", 69);
+}

@@ -105,7 +105,7 @@ fn String[] build_linux_link_command(Linker* linker, CompileContext* context) =>
         command.push("--dynamic-linker");
         command.push("/lib64/ld-linux-x86-64.so.2");
     default:
-        io::printfn("Arch '%s' niot supported yet", linker.target_arch);
+        io::printfn("Arch '%s' not supported yet", linker.target_arch);
     }
 
     command.push("-o");
