@@ -11,6 +11,7 @@ fn void main(String[] argv)
 {
     @todo("mark type narrowing as error without explicit cast");
     @todo("make slices provide the pointer for function calls that require a char*");
+    @todo("make lookup::get_type_info() that grabs it from registry with its qualified name");
 
     CompileContext* context = core::context_create();
 
@@ -29,7 +30,7 @@ fn void main(String[] argv)
     path::traverse("stdlib".to_path(context.alloc), fn bool?(path, is_dir, data) {
         CompileContext* context = (CompileContext*)data;
 
-        if (!is_dir && path.has_extension("nina")) {
+        if (!is_dir && path.has_extension("n")) {
             context.args.files.push(path.copy(context.alloc));
         }
 

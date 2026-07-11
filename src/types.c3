@@ -39,11 +39,11 @@ struct CompileContext {
     Args*                          args;
     HashMap{String, String}        mods;
     String                         current_file;
+    String                         current_module;
     Lookup*                        lookup;
+    Registry*                      registry;
     HashMap{String, Node*}         trees;
-    HashMap{String, FunctionInfo*} functions;
     HashMap{String, LLVMModuleRef} modules;
-    HashMap{String, TypeInfo*}     types;
     LLVMContextRef*                llvm_context;
 }
 
@@ -84,7 +84,7 @@ enum TokenType {
     STRING,
     TRUE,
     FALSE,
-    NUL,
+    NULL,
 
     KW_MOD,
     KW_RET,
@@ -248,6 +248,12 @@ enum NodeType {
     IF,
     STRUCT,
     INIT,
+    NULL,
+}
+
+struct Registry {
+    HashMap{String, FunctionInfo*} functions;
+    HashMap{String, TypeInfo*}     types;
 }
 
 struct Analyser {

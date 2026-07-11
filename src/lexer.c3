@@ -107,7 +107,7 @@ fn void tokenize(Lexer* lexer, CompileContext* context) {
         if (!core::range_compare(lexer.range, start_range)) {
             Range end = { start_range.line, start_range.column + 1 };
 
-            highlighter::error(context, start_range, end, "Unrecognized character '%c'", lexer.current);
+            highlighter::error(context, lexer.filepath, start_range, end, "Unrecognized character '%c'", lexer.current);
         }
     }
 
@@ -179,6 +179,7 @@ fn void word(Lexer* lexer, CompileContext* context) => @pool() {
     case "else":  type = TokenType.KW_ELSE;
     case "type":  type = TokenType.KW_TYPE;
     case "new":   type = TokenType.KW_NEW;
+    case "null":  type = TokenType.NULL;
     default:      type = TokenType.IDENT;
     }
 

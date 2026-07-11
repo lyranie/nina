@@ -10,11 +10,13 @@ import std::io;
 import std::os;
 
 fn Analyser* create(CompileContext* context, String path) {
-    context.current_file = path;
+    context.current_file   = path;
 
     Analyser* analyser = alloc::new(context.alloc, Analyser);
     String    mod      = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
     
+    context.current_module = mod;
+
     analyser.scope       = scope::create(context.alloc);
     analyser.module_name = mod;
     analyser.imports.init(context.alloc);
@@ -47,7 +49,7 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
     case NodeType.STRING:
         break;
     case NodeType.BIN:
-        analyse_bin(analyser, context, node);
+        analyse_bin(analyser, context, node, data);
     case NodeType.IDENT:
         analyse_ident(analyser, context, node);
     case NodeType.VARIABLE:
@@ -59,11 +61,13 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
     case NodeType.UNARY:
         analyse_unary(analyser, context, node);
     case NodeType.IF:
-        analyse_if(analyser, context, node);
+        analyse_if(analyser, context, node, data);
     case NodeType.STRUCT:
         analyse_struct(analyser, context, node);
     case NodeType.INIT:
         analyse_init(analyser, context, node);
+    case NodeType.NULL:
+        break;
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -75,6 +79,7 @@ fn void analyse_mod(Analyser* analyser, CompileContext* context, Node* node) {
     if (context.mods.has_key(path)) {
         highlighter::error(
             context,
+            context.current_file,
             node.mod_node.path.range.from,
             node.mod_node.path.range.to,
             "Module '%s' already declared in file '%s'", path, context.mods.get(path)
@@ -95,15 +100,15 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
     if (scope::has_function(analyser.scope, name)) {
         FunctionInfo* prev = scope::get_function(analyser.scope, name);
 
-        highlighter::note(context, prev.node.range.from, prev.node.range.to, "Previous definition was here");
-        highlighter::error(context, node.range.from, node.range.to, "Function '%s' already defined", name);
+        highlighter::note(context, context.current_file, prev.node.range.from, prev.node.range.to, "Previous definition was here");
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Function '%s' already defined", name);
     }
 
     scope::add_function(analyser.scope, context.alloc, name, analyser.module_name, context.current_file, node);
 
     if (!always_returns(analyser, context, node) && lookup::get_type_name(context, node, analyser.scope) != "void")
     {
-        highlighter::error(context, node.range.from, node.range.to, "Missing return at end of function");
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Missing return at end of function");
     }
 
     Node* type = node.function_node.type;
@@ -120,8 +125,8 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
         if (parameters.has_key(parameter_name)) {
             Node* prev = parameters.get(parameter_name)!!;
 
-            highlighter::note(context, prev.range.from, prev.range.to, "Previous definition was here");
-            highlighter::error(context, parameter.range.from, parameter.range.to, "Parameter '%s' already defined", parameter_name);
+            highlighter::note(context, context.current_file, prev.range.from, prev.range.to, "Previous definition was here");
+            highlighter::error(context, context.current_file, parameter.range.from, parameter.range.to, "Parameter '%s' already defined", parameter_name);
         }
 
         parameters.set(parameter_name, parameter);
@@ -138,18 +143,36 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
 fn void analyse_type(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
     String name = node.type_node.name.path_node.path;
 
-    if (!(context.lookup.has_key(name) || context.types.has_key(name))) {
-        highlighter::error(context, node.range.from, node.range.to, "Could not find type '%s'", name);
+    if (name.contains(".")) {
+        long   i           = name.rindex_of(".")!!;
+        String module_name = name[:i];
+
+        if (!analyser.imports.contains(module_name)) {
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", module_name);
+        }
+    }
+
+    // check if type is path from other module; if yes, check if module imported
+
+    TypeInfo* type_info = lookup::get_type_info(context, name);
+
+    if (!type_info) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find type '%s'", name);
     }
 }
 
 fn void analyse_ret(Analyser* analyser, CompileContext* context, Node* node, void* data) {
     Node* function_type = (Node*)data;
 
-    @todo("compare return type to function type");
-
     if (node.ret_node.value) {
         analyse_node(analyser, context, node.ret_node.value);
+
+        if (!lookup::compare_type(context, function_type, node, analyser.scope)) {
+            String expected_type = lookup::get_type_name(context, function_type, analyser.scope);
+            String return_type   = lookup::get_type_name(context, node, analyser.scope);
+
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Expected return type '%s', got '%s'", expected_type, return_type);
+        }
     }
 }
 
@@ -160,8 +183,8 @@ fn void analyse_ext(Analyser* analyser, CompileContext* context, Node* node) {
     if (scope::has_function(analyser.scope, name)) {
         FunctionInfo* prev = scope::get_function(analyser.scope, name);
         
-        highlighter::note(context, prev.node.range.from, prev.node.range.to, "Previous definition was here");
-        highlighter::error(context, node.range.from, node.range.to, "Function '%s' already defined", name);
+        highlighter::note(context, context.current_file, prev.node.range.from, prev.node.range.to, "Previous definition was here");
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Function '%s' already defined", name);
     }
 
     scope::add_function(analyser.scope, context.alloc, name, analyser.module_name, context.current_file, node);
@@ -179,8 +202,8 @@ fn void analyse_ext(Analyser* analyser, CompileContext* context, Node* node) {
         if (parameters.has_key(parameter_name)) {
             Node* prev = parameters.get(parameter_name)!!;
 
-            highlighter::note(context, prev.range.from, prev.range.to, "Previous definition was here");
-            highlighter::error(context, parameter.range.from, parameter.range.to, "Parameter '%s' already defined", parameter_name);
+            highlighter::note(context, context.current_file, prev.range.from, prev.range.to, "Previous definition was here");
+            highlighter::error(context, context.current_file, parameter.range.from, parameter.range.to, "Parameter '%s' already defined", parameter_name);
         }
 
         parameters.set(parameter_name, parameter);
@@ -188,25 +211,24 @@ fn void analyse_ext(Analyser* analyser, CompileContext* context, Node* node) {
     }
 }
 
-fn void analyse_call(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
+fn void analyse_call(Analyser* analyser, CompileContext* context, Node* node) {
     String        name          = node.call_node.name.path_node.path;
-    String        full_name     = string::tformat("%s.%s", analyser.module_name, name);
-    FunctionInfo* function_info = context.functions.get(full_name) ?? scope::get_function(analyser.scope, name);
+    FunctionInfo* function_info = lookup::get_function_info(context, name);
 
     handle_call(analyser, context, node, name, analyser.module_name, function_info);
 }
 
-fn void analyse_bin(Analyser* analyser, CompileContext* context, Node* node) {
+fn void analyse_bin(Analyser* analyser, CompileContext* context, Node* node, void* data) {
     @todo("check if operator is applicable to type");
 
-    analyse_node(analyser, context, node.bin_node.left);
-    analyse_node(analyser, context, node.bin_node.right);
+    analyse_node(analyser, context, node.bin_node.left, data);
+    analyse_node(analyser, context, node.bin_node.right, data);
 
     if (!lookup::compare_type(context, node.bin_node.left, node.bin_node.right, analyser.scope)) {
         String left_type  = lookup::get_type_name(context, node.bin_node.left, analyser.scope);
         String right_type = lookup::get_type_name(context, node.bin_node.right, analyser.scope);
 
-        highlighter::error(context, node.range.from, node.range.to, "Cannot operate type '%s' with type '%s'", left_type, right_type);
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot operate type '%s' with type '%s'", left_type, right_type);
     }
 }
 
@@ -214,7 +236,7 @@ fn void analyse_ident(Analyser* analyser, CompileContext* context, Node* node) {
     String name = node.ident_node.name;
 
     if (!scope::has_variable(analyser.scope, name)) {
-        highlighter::error(context, node.range.from, node.range.to, "Could not find variable '%s'", name);
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find variable '%s'", name);
     }
 }
 
@@ -226,8 +248,8 @@ fn void analyse_variable(Analyser* analyser, CompileContext* context, Node* node
     if (scope::has_variable(analyser.scope, name)) {
         VariableInfo* prev = scope::get_variable(analyser.scope, name);
         
-        highlighter::note(context, prev.node.range.from, prev.node.range.to, "Previous definition was here");
-        highlighter::error(context, node.range.from, node.range.to, "Variable '%s' already defined", name);
+        highlighter::note(context, context.current_file, prev.node.range.from, prev.node.range.to, "Previous definition was here");
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Variable '%s' already defined", name);
     }
 
     scope::add_variable(analyser.scope, context.alloc, name, node);
@@ -239,7 +261,7 @@ fn void analyse_variable(Analyser* analyser, CompileContext* context, Node* node
             String variable_type = lookup::get_type_name(context, node, analyser.scope);
             String value_type    = lookup::get_type_name(context, node.variable_node.value, analyser.scope);
 
-            highlighter::error(context, node.variable_node.value.range.from, node.variable_node.value.range.to, "Expected type '%s', got '%s'", variable_type, value_type);
+            highlighter::error(context, context.current_file, node.variable_node.value.range.from, node.variable_node.value.range.to, "Expected type '%s', got '%s'", variable_type, value_type);
         }
 
         @todo("check if value type matches variable type");
@@ -258,13 +280,13 @@ fn void analyse_compound(Analyser* analyser, CompileContext* context, NodeList s
 
         if (returned)
         {
-            highlighter::warn(context, statement.range.from, statement.range.to, "Statement will never be executed");
+            highlighter::warn(context, context.current_file, statement.range.from, statement.range.to, "Statement will never be executed");
         }
 
         if (statement.type == NodeType.RET && index != statements.len() - 1)
         {
             returned = true;
-            highlighter::note(context, statement.range.from, statement.range.to, "No statement will be executed after return");
+            highlighter::note(context, context.current_file, statement.range.from, statement.range.to, "No statement will be executed after return");
         }
     }
 }
@@ -281,7 +303,7 @@ fn void analyse_use(Analyser* analyser, CompileContext* context, Node* node) {
     }
 
     if (!found) {
-        highlighter::error(context, node.range.from, node.range.to, "Could not find module '%s'", path);
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s'", path);
     }
 
     analyser.imports.push(path);
@@ -306,7 +328,7 @@ fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) 
         if (module_found) {
             traverse_access_module(analyser, context, node);
         } else {
-            highlighter::error(context, path.range.from, path.range.to, "Could not find '%s'", name);
+            highlighter::error(context, context.current_file, path.range.from, path.range.to, "Could not find '%s'", name);
         }
     }
 }
@@ -315,21 +337,21 @@ fn void analyse_unary(Analyser* analyser, CompileContext* context, Node* node) {
     @todo("check if operator is applickable to expr");
 }
 
-fn void analyse_if(Analyser* analyser, CompileContext* context, Node* node) {
+fn void analyse_if(Analyser* analyser, CompileContext* context, Node* node, void* data) {
     @todo("check if condition type is passable");
 
     analyse_node(analyser, context, node.if_node.condition);
 
     foreach (Node* statement : node.if_node.then_statements) {
-        analyse_node(analyser, context, statement);
+        analyse_node(analyser, context, statement, data);
     }
 
     foreach (Node* statement : node.if_node.else_statements) {
-        analyse_node(analyser, context, statement);
+        analyse_node(analyser, context, statement, data);
     }
 
     if (node.if_node.else_if) {
-        analyse_node(analyser, context, node.if_node.else_if);
+        analyse_node(analyser, context, node.if_node.else_if, data);
     }
 }
 
@@ -339,8 +361,8 @@ fn void analyse_struct(Analyser* analyser, CompileContext* context, Node* node) 
     if (scope::has_type(analyser.scope, name)) {
         TypeInfo* prev = scope::get_type(analyser.scope, name);
         
-        highlighter::note(context, prev.node.range.from, prev.node.range.to, "Previous definition was here");
-        highlighter::error(context, node.range.from, node.range.to, "Type '%s' already defined", name);
+        highlighter::note(context, prev.file, prev.node.range.from, prev.node.range.to, "Previous definition was here");
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Type '%s' already defined", name);
     }
 
     scope::add_type(analyser.scope, context.alloc, name, analyser.module_name, context.current_file, node);
@@ -356,8 +378,8 @@ fn void analyse_struct(Analyser* analyser, CompileContext* context, Node* node) 
         if (fields.has_key(field_name)) {
             Node* prev = fields.get(field_name)!!;
 
-            highlighter::note(context, prev.range.from, prev.range.to, "Previous definition was here");
-            highlighter::error(context, field.range.from, field.range.to, "Field '%s' already defined", field_name);
+            highlighter::note(context, context.current_file, prev.range.from, prev.range.to, "Previous definition was here");
+            highlighter::error(context, context.current_file, field.range.from, field.range.to, "Field '%s' already defined", field_name);
         }
 
         fields.set(field_name, field);
@@ -365,27 +387,27 @@ fn void analyse_struct(Analyser* analyser, CompileContext* context, Node* node) 
 }
 
 fn void analyse_init(Analyser* analyser, CompileContext* context, Node* node) {
-    String name = node.struct_node.name.path_node.path;
+    String    name      = node.struct_node.name.path_node.path;
+    TypeInfo* type_info = lookup::get_type_info(context, name);
 
-    if (!(context.lookup.has_key(name) || context.types.has_key(name))) {
-        highlighter::error(context, node.range.from, node.range.to, "Could not find type '%s'", name);
+    if (!type_info) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find type '%s'", name);
     }
 
-    TypeInfo* type_info = context.types.get(name) ?? scope::get_type(analyser.scope, name);
-    NodeList  fields    = type_info.node.struct_node.fields;
+    NodeList fields = type_info.node.struct_node.fields;
 
     int arguments_len = (int)node.init_node.arguments.len();
     int fields_len    = (int)fields.len();
     
     if (arguments_len < fields_len) {
-        highlighter::note(context, type_info.node.range.from, type_info.node.range.to, "Definition was here");
-        highlighter::error(context, node.range.from, node.range.to, "Expected more arguments");
+        highlighter::note(context, type_info.file, type_info.node.range.from, type_info.node.range.to, "Definition was here");
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Expected more arguments");
     }
 
     if (arguments_len > fields_len) {
         Node* argument = node.init_node.arguments[(long)arguments_len - 1];
 
-        highlighter::error(context, argument.range.from, argument.range.to, "Expected less arguments");
+        highlighter::error(context, context.current_file, argument.range.from, argument.range.to, "Expected less arguments");
     }
 
     foreach (int i, Node* argument : node.init_node.arguments) {
@@ -401,7 +423,7 @@ fn void analyse_init(Analyser* analyser, CompileContext* context, Node* node) {
             String field_type    = lookup::get_type_name(context, field, analyser.scope);
             String argument_type = lookup::get_type_name(context, argument, analyser.scope);
 
-            highlighter::error(context, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", field_type, argument_type);
+            highlighter::error(context, context.current_file, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", field_type, argument_type);
         }
     }
 }
@@ -434,7 +456,7 @@ fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node
 
     String module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
     if (!analyser.imports.contains(module_name)) {
-        highlighter::error(context, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", module_name);
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", module_name);
     }
 
     next = node;
@@ -443,7 +465,7 @@ fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node
         case NodeType.ACCESS:
             next = next.access_node.next;
         case NodeType.CALL:
-            handle_call(analyser, context, next, full_name.str_view(), module_name, context.functions.get(full_name.str_view()) ?? null);
+            handle_call(analyser, context, next, full_name.str_view(), module_name, lookup::get_function_info(context, full_name.str_view()));
 
             @todo("move above block to separate function");
 
@@ -453,8 +475,8 @@ fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node
         }
     }
 
-    if (!context.functions.has_key(full_name.str_view())) {
-        highlighter::error(context, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", function_name, module_name);
+    if (!context.registry.functions.has_key(full_name.str_view())) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", function_name, module_name);
     }
 }
 
@@ -463,12 +485,11 @@ fn void traverse_access_variable(Analyser* analyser, CompileContext* context, No
     VariableInfo* variable_info = scope::get_variable(analyser.scope, name);
 
     if (lookup::get_base_type_group(context, variable_info.node, analyser.scope) != "struct") {
-        highlighter::panic();
+        highlighter::panic("type group is %s", lookup::get_base_type_group(context, variable_info.node, analyser.scope));
     }
 
-    String    type_name      = lookup::get_type_name(context, variable_info.node, analyser.scope);
-    String    qualified_name = type_name.contains(".") ? type_name : string::tformat("%s.%s", analyser.module_name, type_name);
-    TypeInfo* type_info      = context.types.get(qualified_name) ?? scope::get_type(analyser.scope, type_name);
+    String    type_name = lookup::get_type_name(context, variable_info.node, analyser.scope);
+    TypeInfo* type_info = lookup::get_type_info(context, type_name);
 
     traverse_access_field(analyser, context, node, type_info);
 }
@@ -496,7 +517,7 @@ fn void traverse_access_field(Analyser* analyser, CompileContext* context, Node*
     }
 
     if (!field_node) {
-        highlighter::error(context, node.range.from, node.range.to, "Could not find field '%s' on type '%s'", field_name, field_type);
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find field '%s' on type '%s'", field_name, field_type);
     }
 }
 
@@ -531,7 +552,7 @@ fn bool compound_returns(Analyser* analyser, CompileContext* context, NodeList s
 
 fn void handle_call(Analyser* analyser, CompileContext* context, Node* node, String name, String module_name, FunctionInfo* function_info) {
     if (!function_info) {
-        highlighter::error(context, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", name, module_name);
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", name, module_name);
     }
 
     bool vaarg = false;
@@ -562,15 +583,15 @@ fn void handle_call(Analyser* analyser, CompileContext* context, Node* node, Str
     int parameters_len = (int)parameters.len();
     
     if (arguments_len < min_parameters_len) {
-        highlighter::note(context, function_info.node.range.from, function_info.node.range.to, "Definition was here");
-        highlighter::error(context, node.range.from, node.range.to, "Expected more arguments");
+        highlighter::note(context, function_info.file, function_info.node.range.from, function_info.node.range.to, "Definition was here");
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Expected more arguments");
     }
 
     if (arguments_len > parameters_len) {
         if (!vaarg) {
             Node* argument = node.call_node.arguments[(long)arguments_len - 1];
 
-            highlighter::error(context, argument.range.from, argument.range.to, "Expected less arguments");
+            highlighter::error(context, context.current_file, argument.range.from, argument.range.to, "Expected less arguments");
         }
     }
 
@@ -591,7 +612,7 @@ fn void handle_call(Analyser* analyser, CompileContext* context, Node* node, Str
             String parameter_type = lookup::get_type_name(context, parameter, analyser.scope);
             String argument_type  = lookup::get_type_name(context, argument, analyser.scope);
 
-            highlighter::error(context, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", parameter_type, argument_type);
+            highlighter::error(context, context.current_file, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", parameter_type, argument_type);
         }
     }
 }

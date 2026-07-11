@@ -1,0 +1,34 @@
+mod intlist;
+
+use libc;
+
+/*
+ * IntList; default size is 0; reallocates on add/remove
+ *
+ * @param entries The pointer to the stored entries
+ * @param num_entries The current amount of entries stored
+ */
+type IntList(int* entries, int num_entries);
+
+// List<int> list = new List<int>(1);
+
+IntList create(int default_size) {
+    int* entries = libc.malloc(4 * default_size);
+
+    ret new IntList(entries, 0);
+}
+
+void add(IntList list, int i) {
+    // if (i + 1 >= list.num_entries) {
+        // realloc
+    // }
+
+    // 4 is the size of 1 element
+    // int  offset = 4 * list.num_entries;
+    // int* dst    = list.entries + offset;
+
+    int* src = libc.malloc(4);
+    // store i later
+
+    libc.memcpy(list.entries, src, 4);
+}

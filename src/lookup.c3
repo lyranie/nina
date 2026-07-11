@@ -43,14 +43,8 @@ fn LLVMTypeRef get_llvm_type(CompileContext* context, Node* node) {
         String type_suffix = node.type_node.suffix;
 
         // if type from other module
-        Type*?      type      = context.lookup.get(type_name);
-        TypeInfo*?  type_info = context.types.get(type_name);
-        LLVMTypeRef llvm_type;
-        if (try type) {
-            llvm_type = type.llvm_type;
-        } else {
-            llvm_type = type_info.llvm_type!!;
-        }
+        TypeInfo*   type_info = get_type_info(context, type_name);
+        LLVMTypeRef llvm_type = type_info.llvm_type;
 
         while (type_suffix.ends_with("*") || type_suffix.ends_with("[]")) {
             switch (type_suffix[type_suffix.len - 1]) {
@@ -67,13 +61,7 @@ fn LLVMTypeRef get_llvm_type(CompileContext* context, Node* node) {
             List{LLVMTypeRef} llvm_fields;
             llvm_fields.tinit();
             
-            NodeList fields;
-            if (try type) {
-                fields = type.node.struct_node.fields;
-            } else {
-                fields = type_info.node.struct_node.fields!!;
-            }
-            foreach (Node* field : fields) {
+            foreach (Node* field : type_info.node.struct_node.fields) {
                 llvm_fields.push(get_llvm_type(context, field.parameter_node.type));
             }
 
@@ -137,8 +125,7 @@ fn LLVMMetadataRef get_llvm_debug_type_from_kind(Allocator alloc, Generator* gen
 
         return llvm::di_builder_create_basic_type(generator.llvm_debug_builder, (CChar*)name.ptr, (CUInt)name.len, width, 5, LLVMDIFlags.DI_FLAG_ZERO);
     default:
-        io::eprintfn("Missing get_llvm_debug_type_from_kind case for type kind '%s'", llvm::get_type_kind(llvm_type));
-        os::exit(1);
+        highlighter::panic("Missing get_llvm_debug_type_from_kind case for type kind '%s'", llvm::get_type_kind(llvm_type));
     }
 }
 
@@ -206,9 +193,9 @@ fn String get_type_name(CompileContext* context, Node* node, Scope* scope) {
     case NodeType.UNARY:
         return get_type_name(context, node.unary_node.node, scope);
     case NodeType.CALL:
-        String        name          = node.call_node.name.ident_node.name;
-        FunctionInfo* function_info = scope::get_function(scope, name);
-        String        type_name     = get_type_name(context, function_info.node, scope);
+        String        name           = node.call_node.name.ident_node.name;
+        FunctionInfo* function_info  = get_function_info(context, name);
+        String        type_name      = get_type_name(context, function_info.node, scope);
 
         return type_name.contains(".") ? type_name : string::tformat("%s.%s", function_info.mod, type_name);
     case NodeType.ACCESS:
@@ -216,13 +203,20 @@ fn String get_type_name(CompileContext* context, Node* node, Scope* scope) {
         String name = path.path_node.path;
 
         if (scope::has_variable(scope, name)) {
-            @todo("get_type_name_access for variable");
-            highlighter::panic("get_type_name_access for variable");
+            return traverse_access_variable(context, node, scope);
         } else {
             return traverse_access_module(context, node, scope);
         }
     case NodeType.INIT:
         return node.init_node.name.path_node.path;
+    case NodeType.NULL:
+        return "null";
+    case NodeType.RET:
+        if (node.ret_node.value) {
+            return get_type_name(context, node.ret_node.value, scope);
+        }
+
+        return "void";
     default:
         highlighter::panic("Missing get_type_name case for type '%s'", node.type);
     }
@@ -291,7 +285,7 @@ fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope)
         return get_base_type_group(context, node.unary_node.node, scope);
     case NodeType.CALL:
         String        name          = node.call_node.name.ident_node.name;
-        FunctionInfo* function_info = scope::get_function(scope, name);
+        FunctionInfo* function_info = get_function_info(context, name);
 
         return get_base_type_group(context, function_info.node, scope);
     case NodeType.FUNCTION:
@@ -301,13 +295,14 @@ fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope)
         String name = path.path_node.path;
 
         if (scope::has_variable(scope, name)) {
-            @todo("get_type_name_access for variable");
-            highlighter::panic("get_type_name_access for variable");
+            return traverse_access_variable_base_group(context, node, scope);
         } else {
             return traverse_access_module_base_group(context, node, scope);
         }
     case NodeType.INIT:
         return node.init_node.name.path_node.path;
+    case NodeType.NULL:
+        return "pointer";
     default:
         highlighter::panic("Missing get_base_type_group case for type '%s'", node.type);
     }
@@ -320,6 +315,41 @@ fn NodeList get_type_fields(CompileContext* context, TypeInfo* type_info, Scope*
     default:
         highlighter::panic();
     }
+}
+
+fn String traverse_access_variable(CompileContext* context, Node* node, Scope* scope) => @pool() {
+    String        name          = node.access_node.name.path_node.path;
+    VariableInfo* variable_info = scope::get_variable(scope, name);
+
+    String    type_name = lookup::get_type_name(context, variable_info.node, scope);
+    TypeInfo* type_info = get_type_info(context, type_name);
+
+    return traverse_access_field(context, node, scope, type_info);
+}
+
+fn String traverse_access_field(CompileContext* context, Node* node, Scope* scope, TypeInfo* type_info) => @pool() {
+    String name = node.access_node.name.path_node.path;
+
+    switch (node.access_node.next.type) {
+    case NodeType.IDENT:
+        break;
+    default:
+        highlighter::panic("traverse_access_field#access");
+    }
+
+    String   field_name = node.access_node.next.ident_node.name;
+    NodeList fields     = lookup::get_type_fields(context, type_info, scope);
+    String   field_type = lookup::get_type_name(context, node.access_node.name, scope);
+
+    Node* field_node;
+    foreach (Node* field : fields) {
+        if (field.parameter_node.name.ident_node.name == field_name) {
+            field_node = field;
+            break;
+        }
+    }
+
+    return get_type_name(context, field_node, scope);
 }
 
 fn String traverse_access_module(CompileContext* context, Node* node, Scope* scope) => @pool() {
@@ -356,7 +386,7 @@ fn String traverse_access_module(CompileContext* context, Node* node, Scope* sco
         case NodeType.ACCESS:
             next = next.access_node.next;
         case NodeType.CALL:
-            FunctionInfo* function_info = context.functions.get(full_name.str_view())!!;
+            FunctionInfo* function_info = get_function_info(context, full_name.str_view());
             Node*         type_node;
 
             switch (function_info.node.type) {
@@ -377,6 +407,41 @@ fn String traverse_access_module(CompileContext* context, Node* node, Scope* sco
     }
     
     highlighter::panic();
+}
+
+fn String traverse_access_variable_base_group(CompileContext* context, Node* node, Scope* scope) => @pool() {
+    String        name          = node.access_node.name.path_node.path;
+    VariableInfo* variable_info = scope::get_variable(scope, name);
+
+    String    type_name = lookup::get_type_name(context, variable_info.node, scope);
+    TypeInfo* type_info = get_type_info(context, type_name);
+
+    return traverse_access_field_base_group(context, node, scope, type_info);
+}
+
+fn String traverse_access_field_base_group(CompileContext* context, Node* node, Scope* scope, TypeInfo* type_info) => @pool() {
+    String name = node.access_node.name.path_node.path;
+
+    switch (node.access_node.next.type) {
+    case NodeType.IDENT:
+        break;
+    default:
+        highlighter::panic("traverse_access_field#access");
+    }
+
+    String   field_name = node.access_node.next.ident_node.name;
+    NodeList fields     = lookup::get_type_fields(context, type_info, scope);
+    String   field_type = lookup::get_type_name(context, node.access_node.name, scope);
+
+    Node* field_node;
+    foreach (Node* field : fields) {
+        if (field.parameter_node.name.ident_node.name == field_name) {
+            field_node = field;
+            break;
+        }
+    }
+
+    return get_base_type_group(context, field_node, scope);
 }
 
 fn String traverse_access_module_base_group(CompileContext* context, Node* node, Scope* scope) => @pool() {
@@ -413,7 +478,7 @@ fn String traverse_access_module_base_group(CompileContext* context, Node* node,
         case NodeType.ACCESS:
             next = next.access_node.next;
         case NodeType.CALL:
-            FunctionInfo* function_info = context.functions.get(full_name.str_view())!!;
+            FunctionInfo* function_info = get_function_info(context, full_name.str_view());
             Node*         type_node;
 
             switch (function_info.node.type) {
@@ -432,4 +497,30 @@ fn String traverse_access_module_base_group(CompileContext* context, Node* node,
     }
     
     highlighter::panic();
+}
+
+fn TypeInfo* get_type_info(CompileContext* context, String name) {
+    if (context.lookup.has_key(name)) {
+        Type* type = context.lookup.get(name)!!;
+        TypeInfo* type_info = alloc::new(context.alloc, TypeInfo);
+
+        type_info.node      = type.node;
+        type_info.llvm_type = type.llvm_type;
+
+        return type_info;
+    }
+
+    String qualified_name = name.contains(".")
+        ? name
+        : string::tformat("%s.%s", context.current_module, name);
+
+    return context.registry.types.get(qualified_name)!!;
+}
+
+fn FunctionInfo* get_function_info(CompileContext* context, String name) {
+    String qualified_name = name.contains(".")
+        ? name
+        : string::tformat("%s.%s", context.current_module, name);
+
+    return context.registry.functions.get(qualified_name)!!;
 }

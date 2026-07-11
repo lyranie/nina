@@ -16,7 +16,7 @@ fn Linker* create(CompileContext* context) {
     if (context.args.output != "") {
         linker.output = context.args.output;
     } else {
-        linker.output = context.args.files[0].replace(context.alloc, ".nina", "").file_basename(context.alloc)!!;
+        linker.output = context.args.files[0].replace(context.alloc, ".n", "").file_basename(context.alloc)!!;
     }
 
     create_default_target(linker, context.alloc);

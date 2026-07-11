@@ -46,11 +46,11 @@ fn void main() {
     for (int i = 0; i < items.len(); i++) {
         Path path = items[i];
 
-        if (!path.has_extension("nina")) {
+        if (!path.has_extension("n")) {
             continue;
         }
         
-        summary.set(path, run_test(context, ((String)path).strip_suffix(".nina")));
+        summary.set(path, run_test(context, ((String)path).strip_suffix(".n")));
     }
 
     print_summary(context, summary);
@@ -59,7 +59,7 @@ fn void main() {
 }
 
 fn bool run_test(CompileContext* context, String name) {
-    String test_file = string::format(context.alloc, "test/unit/%s.nina", name);
+    String test_file = string::format(context.alloc, "test/unit/%s.n", name);
 
     Lexer* lexer = nina_lexer_create(context, (CChar*)test_file.ptr);
     nina_lexer_tokenize(context, lexer);

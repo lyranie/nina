@@ -8,6 +8,15 @@ import nina::lookup;
 import std::io;
 import std::collections::list;
 
+fn Registry* create(Allocator alloc) {
+    Registry* registry = alloc::new(alloc, Registry);
+
+    registry.functions.init(alloc);
+    registry.types.init(alloc);
+
+    return registry;
+}
+
 fn void register(CompileContext* context, Parser* parser) {
     String        mod         = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
     LLVMModuleRef llvm_module = llvm::module_create_with_name((CChar*)mod.ptr);
@@ -33,7 +42,7 @@ fn void register_types(CompileContext* context, Node* node) {
         type_info.node       = node;
         type_info.llvm_type  = llvm_struct_type;
 
-        context.types.set(name, type_info);
+        context.registry.types.set(name, type_info);
 
         lookup::register_type(context.lookup, context.alloc, type_name, context.current_file, node, llvm_struct_type);
     case NodeType.MOD:
@@ -79,7 +88,7 @@ fn void register_functions(CompileContext* context, Node* node) {
         function_info.llvm_type  = llvm_function_type;
         function_info.llvm_value = llvm_function_value;
 
-        context.functions.set(name, function_info);
+        context.registry.functions.set(name, function_info);
     case NodeType.EXT:
         String mod_name = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
         String ext_name = node.ext_node.name.ident_node.name;
@@ -114,7 +123,7 @@ fn void register_functions(CompileContext* context, Node* node) {
         function_info.llvm_type  = llvm_function_type;
         function_info.llvm_value = llvm_function_value;
 
-        context.functions.set(name, function_info);
+        context.registry.functions.set(name, function_info);
     case NodeType.MOD:
         foreach (Node* statement : node.mod_node.statements) {
             register_functions(context, statement);

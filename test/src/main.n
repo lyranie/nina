@@ -1,0 +1,19 @@
+mod test.main;
+
+// use intlist;
+
+int main() {
+    // intlist.IntList arr = intlist.create(4);
+    // intlist.add(arr, 5);
+
+    int i = 5;
+    int* j = &i;
+    int k = *j;
+
+    libc.printf("%d\n", i);
+    libc.printf("%p\n", j);
+    libc.printf("%d\n", *j);
+    libc.printf("%d\n", k);
+
+    ret 0;
+}

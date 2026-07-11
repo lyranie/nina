@@ -6,6 +6,7 @@ import nina::args;
 import nina::types;
 import nina::lookup;
 import nina::profiler;
+import nina::registry;
 
 import std::io;
 import std::os;
@@ -32,9 +33,9 @@ fn CompileContext* context_create() {
     context.args         = args::create(alloc);
     context.lookup       = lookup::create(alloc);
     context.llvm_context = llvm::context_create();
+    context.registry     = registry::create(alloc);
     context.mods.init(alloc);
     context.trees.init(alloc);
-    context.functions.init(alloc);
     context.modules.init(alloc);
 
     return context;

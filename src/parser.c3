@@ -46,7 +46,7 @@ fn void parse_mod(Parser* parser, CompileContext* context, Lexer* lexer) {
         case TokenType.KW_TYPE:
             statements.push(parse_struct(parser, context, lexer));
         default:
-            highlighter::error(context, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
+            highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
         }
     }
 
@@ -231,7 +231,7 @@ fn NodeList parse_compound(Parser* parser, CompileContext* context, Lexer* lexer
         case TokenType.KW_IF:
             statements.push(parse_if(parser, context, lexer));
         default:
-            highlighter::error(context, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
+            highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
         }
     }
 
@@ -316,8 +316,10 @@ fn Node* parse_factor(Parser* parser, CompileContext* context, Lexer* lexer) {
         node = parse_unary(parser, context, lexer);
     case TokenType.KW_NEW:
         node = parse_init(parser, context, lexer);
+    case TokenType.NULL:
+        node = parse_null(parser, context, lexer);
     default:
-        highlighter::error(context, parser.current.range.start, parser.current.range.end, "Expression expected, got '%s'", parser.current.type);
+        highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Expression expected, got '%s'", parser.current.type);
     }
 
     return node;
@@ -633,9 +635,19 @@ fn Node* parse_init(Parser* parser, CompileContext* context, Lexer* lexer) {
     };
 }
 
+fn Node* parse_null(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.NULL);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.NULL, start, end; node) {};
+}
+
 fn void consume(Parser* parser, CompileContext* context, Lexer* lexer, TokenType type) {
     if (parser.current.type != type) {
-        highlighter::error(context, parser.current.range.start, parser.current.range.end, "Expected type '%s', got '%s'", type, parser.current.type);
+        highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Expected type '%s', got '%s'", type, parser.current.type);
     }
 
     if ((long)parser.cursor + 1 < lexer.context.tokens.len()) {
@@ -676,7 +688,9 @@ fn bool is_qualified_type_ident(Parser* parser, CompileContext* context, Lexer* 
         consume(parser, context, lexer, TokenType.IDENT);
     }
 
-    bool result = parser.current.type == TokenType.IDENT;
+    bool result = parser.current.type == TokenType.IDENT
+        || parser.current.type == TokenType.ASTERISK
+        || parser.current.type == TokenType.LBRACKET;
 
     restore(parser, mark);
     return result;

@@ -125,8 +125,7 @@ fn void generate_mod(Generator* generator, CompileContext* context, Node* node) 
 fn void generate_function(Generator* generator, CompileContext* context, Node* node) {
     String        name          = node.function_node.name.ident_node.name;
     Node*         type          = node.function_node.type;
-    String        full_name     = string::tformat("%s.%s", generator.module_name, name);
-    FunctionInfo* function_info = context.functions.get(full_name)!!;
+    FunctionInfo* function_info = lookup::get_function_info(context, name);
 
     LLVMTypeRef  llvm_function_type  = function_info.llvm_type;
     LLVMValueRef llvm_function_value = function_info.llvm_value;
@@ -202,8 +201,7 @@ fn LLVMValueRef generate_int(Generator* generator, CompileContext* context, Node
 
 fn void generate_ext(Generator* generator, CompileContext* context, Node* node) => @pool() {
     String        name          = node.ext_node.name.ident_node.name;
-    String        full_name     = string::tformat("%s.%s", generator.module_name, name);
-    FunctionInfo* function_info = context.functions.get(full_name)!!;
+    FunctionInfo* function_info = lookup::get_function_info(context, name);
 
     LLVMTypeRef  llvm_function_type  = function_info.llvm_type;
     LLVMValueRef llvm_function_value = function_info.llvm_value;
@@ -224,11 +222,7 @@ fn void generate_ext(Generator* generator, CompileContext* context, Node* node) 
 
 fn LLVMValueRef generate_call(Generator* generator, CompileContext* context, Node* node) => @pool() {
     String        name          = node.call_node.name.path_node.path;
-    String        full_name     = string::tformat("%s.%s", generator.module_name, name);
-    FunctionInfo* function_info = scope::get_function(generator.scope, name);
-    if (!function_info) {
-        function_info = context.functions.get(full_name)!!;
-    }
+    FunctionInfo* function_info = lookup::get_function_info(context, name);
     
     debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
@@ -496,11 +490,7 @@ fn void generate_if(Generator* generator, CompileContext* context, Node* node) {
 
 fn void generate_struct(Generator* generator, CompileContext* context, Node* node) => @pool() {
     String    name      = node.call_node.name.path_node.path;
-    String    full_name = string::tformat("%s.%s", generator.module_name, name);
-    TypeInfo* type_info = scope::get_type(generator.scope, name);
-    if (!type_info) {
-        type_info = context.types.get(full_name)!!;
-    }
+    TypeInfo* type_info = lookup::get_type_info(context, name);
 
     List{LLVMTypeRef} fields;
     fields.tinit();
@@ -510,11 +500,8 @@ fn void generate_struct(Generator* generator, CompileContext* context, Node* nod
         fields.push(lookup::get_llvm_type(context, field.parameter_node.type));
     }
 
-    String global_name = string::format(context.alloc, "__keep_%s", full_name);
-
     LLVMTypeRef llvm_struct_type = type_info.llvm_type;
     llvm::struct_set_body(llvm_struct_type, fields.to_array(context.alloc), (CUInt)fields.len(), llvm::FALSE);
-    llvm::add_global(generator.llvm_module, llvm_struct_type, (CChar*)global_name.ptr);
 }
 
 fn LLVMValueRef generate_init(Generator* generator, CompileContext* context, Node* node) => @pool() {
@@ -534,13 +521,7 @@ fn LLVMValueRef generate_init(Generator* generator, CompileContext* context, Nod
         }
     }
 
-    TypeInfo* type_info;
-    if (name.contains(".")) {
-        type_info = context.types.get(name) ?? scope::get_type(generator.scope, name);
-    } else {
-        type_info = context.types.get(full_name) ?? scope::get_type(generator.scope, name);
-    }
-
+    TypeInfo*   type_info   = lookup::get_type_info(context, name);
     LLVMTypeRef struct_type = type_info.llvm_type;
 
     if (constant) {
@@ -585,7 +566,7 @@ fn LLVMValueRef traverse_access_module(Generator* generator, CompileContext* con
 
     switch (last.type) {
     case NodeType.CALL:
-        FunctionInfo* function_info = context.functions.get(full_name.str_view())!!;
+        FunctionInfo* function_info = lookup::get_function_info(context, full_name.str_view());
         List{LLVMValueRef} arguments;
         arguments.init(context.alloc);
 
@@ -635,9 +616,8 @@ fn LLVMValueRef traverse_access_variable(Generator* generator, CompileContext* c
     String        name          = node.access_node.name.path_node.path;
     VariableInfo* variable_info = scope::get_variable(generator.scope, name);
 
-    String    type_name      = lookup::get_type_name(context, variable_info.node, generator.scope);
-    String    qualified_name = type_name.contains(".") ? type_name : string::tformat("%s.%s", generator.module_name, type_name);
-    TypeInfo* type_info      = context.types.get(qualified_name) ?? scope::get_type(generator.scope, name);
+    String    type_name = lookup::get_type_name(context, variable_info.node, generator.scope);
+    TypeInfo* type_info = lookup::get_type_info(context, type_name);
 
     return traverse_access_field(generator, context, node, type_info, variable_info.llvm_value);
 }

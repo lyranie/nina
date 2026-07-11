@@ -2,3 +2,4 @@ mod libc;
 
 ext int   printf(char* fmt, args...);
 ext void* malloc(int size);
+ext void* memcpy(void* dst, void* src, int len);

@@ -6,8 +6,8 @@ import std::math;
 import std::io;
 import std::os;
 
-fn void error(CompileContext* context, Range from, Range to, String message, args...) @noreturn {
-    String content  = (String)file::load(context.alloc, context.current_file)!!;
+fn void error(CompileContext* context, String file, Range from, Range to, String message, args...) @noreturn {
+    String content  = (String)file::load(context.alloc, file)!!;
     String line_str = content.tsplit("\n")[from.line != 0 ? from.line - 1 : 0].copy(context.alloc);
 
     io::eprint(Ansi.BRIGHT_RED);
@@ -52,8 +52,8 @@ fn void error(CompileContext* context, Range from, Range to, String message, arg
     os::exit(1);
 }
 
-fn void note(CompileContext* context, Range from, Range to, String message, args...) {
-    String content  = (String)file::load(context.alloc, context.current_file)!!;
+fn void note(CompileContext* context, String file, Range from, Range to, String message, args...) {
+    String content  = (String)file::load(context.alloc, file)!!;
     String line_str = content.tsplit("\n")[from.line != 0 ? from.line - 1 : 0].copy(context.alloc);
 
     io::eprint(Ansi.BRIGHT_BLUE);
@@ -96,8 +96,8 @@ fn void note(CompileContext* context, Range from, Range to, String message, args
     io::eprintfn("in file (%s %d:%d)", context.current_file, from.line, from.column);
 }
 
-fn void warn(CompileContext* context, Range from, Range to, String message, args...) {
-    String content  = (String)file::load(context.alloc, context.current_file)!!;
+fn void warn(CompileContext* context, String file, Range from, Range to, String message, args...) {
+    String content  = (String)file::load(context.alloc, file)!!;
     String line_str = content.tsplit("\n")[from.line != 0 ? from.line - 1 : 0].copy(context.alloc);
 
     io::eprint(Ansi.BRIGHT_YELLOW);
