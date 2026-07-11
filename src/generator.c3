@@ -75,40 +75,27 @@ fn void generate(Generator* generator, CompileContext* context) {
 
 fn void* generate_node(Generator* generator, CompileContext* context, Node* node, void* data = null) {
     switch (node.type) {
-    case NodeType.MOD:
-        generate_mod(generator, context, node);
-    case NodeType.FUNCTION:
-        generate_function(generator, context, node);
-    case NodeType.RET:
-        generate_ret(generator, context, node, data);
-    case NodeType.INT:
-        return generate_int(generator, context, node, data);
-    case NodeType.EXT:
-        generate_ext(generator, context, node);
-    case NodeType.CALL:
-        return generate_call(generator, context, node);
-    case NodeType.BOOL:
-        return generate_bool(generator, context, node);
-    case NodeType.STRING:
-        return generate_string(generator, context, node);
-    case NodeType.BIN:
-        return generate_bin(generator, context, node);
-    case NodeType.IDENT:
-        return generate_ident(generator, context, node, data);
-    case NodeType.VARIABLE:
-        return generate_variable(generator, context, node);
-    case NodeType.USE:
-        break;
-    case NodeType.ACCESS:
-        return generate_access(generator, context, node);
-    case NodeType.UNARY:
-        return generate_unary(generator, context, node);
-    case NodeType.IF:
-        generate_if(generator, context, node);
-    case NodeType.STRUCT:
-        generate_struct(generator, context, node);
-    case NodeType.INIT:
-        return generate_init(generator, context, node);
+    case NodeType.MOD:                generate_mod(generator, context, node);
+    case NodeType.FUNCTION:           generate_function(generator, context, node);
+    case NodeType.RET:                generate_ret(generator, context, node, data);
+    case NodeType.INT:         return generate_int(generator, context, node, data);
+    case NodeType.EXT:                generate_ext(generator, context, node);
+    case NodeType.CALL:        return generate_call(generator, context, node);
+    case NodeType.BOOL:        return generate_bool(generator, context, node);
+    case NodeType.STRING:      return generate_string(generator, context, node);
+    case NodeType.BIN:         return generate_bin(generator, context, node);
+    case NodeType.IDENT:       return generate_ident(generator, context, node, data);
+    case NodeType.VARIABLE:    return generate_variable(generator, context, node);
+    case NodeType.USE:         break;
+    case NodeType.ACCESS:      return generate_access(generator, context, node);
+    case NodeType.UNARY:       return generate_unary(generator, context, node);
+    case NodeType.IF:                 generate_if(generator, context, node);
+    case NodeType.STRUCT:             generate_struct(generator, context, node);
+    case NodeType.INIT:        return generate_init(generator, context, node);
+    case NodeType.REFERENCE:   return generate_reference(generator, context, node);
+    case NodeType.DEREFERENCE: return generate_dereference(generator, context, node);
+    case NodeType.SUFFIX:      return generate_suffix(generator, context, node);
+    case NodeType.ASSIGN:             generate_assign(generator, context, node);
     default:
         highlighter::panic("Missing generator function for type '%s'", node.type);
     }
@@ -150,7 +137,7 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
 
     foreach (CUInt index, Node* parameter : node.function_node.parameters) {
         String       parameter_name       = parameter.parameter_node.name.ident_node.name;
-        LLVMTypeRef  llvm_parameter_type  = lookup::get_llvm_type(context, parameter);
+        LLVMTypeRef  llvm_parameter_type  = lookup::get_llvm_type(context, parameter, generator.scope);
         LLVMValueRef llvm_parameter_value = llvm::get_param(function_info.llvm_value, index);
 
         LLVMValueRef alloca = llvm::build_alloca(generator.llvm_builder, llvm_parameter_type, "");
@@ -192,7 +179,7 @@ fn LLVMValueRef generate_int(Generator* generator, CompileContext* context, Node
     if (data) {
         Node* parameter_type = data;
         if (!parameter_type.parameter_node.vaarg) {
-            int_type = lookup::get_llvm_type(context, parameter_type);
+            int_type = lookup::get_llvm_type(context, parameter_type, generator.scope);
         }
     }
 
@@ -313,8 +300,21 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
 
     switch (node.bin_node.operator.type) {
     case TokenType.PLUS:
+        if (type == "pointer") {
+            LLVMTypeRef element_type = lookup::get_pointee_llvm_type(context, node.bin_node.left, generator.scope);
+
+            return llvm::build_gep2(generator.llvm_builder, element_type, left, &right, 1, "");
+        }
+
         return llvm::build_add(generator.llvm_builder, left, right, "");
     case TokenType.MINUS:
+        if (type == "pointer") {
+            LLVMTypeRef  element_type = lookup::get_pointee_llvm_type(context, node.bin_node.left, generator.scope);
+            LLVMValueRef neg_right    = llvm::build_neg(generator.llvm_builder, right, "");
+
+            return llvm::build_gep2(generator.llvm_builder, element_type, left, &neg_right, 1, "");
+        }
+
         if (type == "real") {
             return llvm::build_f_sub(generator.llvm_builder, left, right, "");
         }
@@ -352,6 +352,12 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
         }
 
         return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_EQ, left, right, "");
+    case TokenType.GTE:
+        if (type == "real") {
+            return llvm::build_f_cmp(generator.llvm_builder, LLVMRealPredicate.REAL_OGE, left, right, "");
+        }
+
+        return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_SGE, left, right, "");
     default:
         highlighter::panic("Missing generate_bin case for operator type '%s'", node.bin_node.operator.type);
     }
@@ -367,7 +373,7 @@ fn LLVMValueRef generate_ident(Generator* generator, CompileContext* context, No
 
 fn LLVMValueRef generate_variable(Generator* generator, CompileContext* context, Node* node) {
     String       name        = node.variable_node.name.path_node.path;
-    LLVMTypeRef  llvm_type   = lookup::get_llvm_type(context, node);
+    LLVMTypeRef  llvm_type   = lookup::get_llvm_type(context, node, generator.scope);
 
     debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
@@ -497,7 +503,7 @@ fn void generate_struct(Generator* generator, CompileContext* context, Node* nod
 
     foreach(Node* field : node.struct_node.fields)
     {
-        fields.push(lookup::get_llvm_type(context, field.parameter_node.type));
+        fields.push(lookup::get_llvm_type(context, field.parameter_node.type, generator.scope));
     }
 
     LLVMTypeRef llvm_struct_type = type_info.llvm_type;
@@ -535,7 +541,173 @@ fn LLVMValueRef generate_init(Generator* generator, CompileContext* context, Nod
         llvm::build_store(generator.llvm_builder, argument, field_ptr);
     }
 
-    return instance;
+    return llvm::build_load_2(generator.llvm_builder, struct_type, instance, "");
+}
+
+fn LLVMValueRef generate_reference(Generator* generator, CompileContext* context, Node* node) {
+    Node* inner = node.reference_node.node;
+
+    if (inner.type == NodeType.IDENT) {
+        VariableInfo* variable_info = scope::get_variable(generator.scope, inner.ident_node.name);
+
+        return variable_info.llvm_value;
+    }
+
+    LLVMValueRef llvm_value = generate_node(generator, context, inner);
+    LLVMTypeRef  llvm_type  = lookup::get_llvm_type(context, node, generator.scope);
+    LLVMValueRef alloca     = llvm::build_alloca(generator.llvm_builder, llvm_type, "");
+
+    llvm::build_store(generator.llvm_builder, llvm_value, alloca);
+
+    return alloca;
+}
+
+fn LLVMValueRef generate_dereference(Generator* generator, CompileContext* context, Node* node) {
+    LLVMValueRef llvm_value = generate_node(generator, context, node.dereference_node.node);
+    LLVMTypeRef  llvm_type  = lookup::get_pointee_llvm_type(context, node.dereference_node.node, generator.scope);
+
+    return llvm::build_load_2(generator.llvm_builder, llvm_type, llvm_value, "");
+}
+
+fn LLVMValueRef generate_suffix(Generator* generator, CompileContext* context, Node* node) {
+    LLVMValueRef target_ptr;
+    LLVMTypeRef  llvm_type;
+    String       base_group;
+
+    if (node.suffix_node.node.type == NodeType.IDENT) {
+        String        name          = node.suffix_node.node.ident_node.name;
+        VariableInfo* variable_info = scope::get_variable(generator.scope, name);
+
+        target_ptr = variable_info.llvm_value;
+        llvm_type  = lookup::get_llvm_type(context, node.suffix_node.node, generator.scope);
+        base_group = lookup::get_base_type_group(context, node.suffix_node.node, generator.scope);
+    } else if (node.suffix_node.node.type == NodeType.ACCESS) {
+        Node*         access_node    = node.suffix_node.node;
+        String        name           = access_node.access_node.name.path_node.path;
+        VariableInfo* variable_info  = scope::get_variable(generator.scope, name);
+        String        access_group   = lookup::get_base_type_group(context, variable_info.node, generator.scope);
+        String        type_name      = lookup::get_type_name(context, variable_info.node, generator.scope);
+
+        if (access_group == "pointer") {
+            type_name = type_name[:type_name.len - 1];
+        }
+
+        TypeInfo* type_info    = lookup::get_type_info(context, type_name);
+        LLVMValueRef instance_ptr = variable_info.llvm_value;
+
+        if (access_group == "pointer") {
+            LLVMTypeRef ptr_llvm_type = lookup::get_llvm_type(context, variable_info.node, generator.scope);
+
+            instance_ptr = llvm::build_load_2(generator.llvm_builder, ptr_llvm_type, instance_ptr, "");
+        }
+
+        String   field_name = access_node.access_node.next.ident_node.name;
+        NodeList fields      = lookup::get_type_fields(context, type_info, generator.scope);
+
+        uint  field_index = 0;
+        Node* field_node;
+        foreach (uint i, Node* field : fields) {
+            if (field.parameter_node.name.ident_node.name == field_name) {
+                field_index = i;
+                field_node = field;
+                break;
+            }
+        }
+
+        llvm_type  = lookup::get_llvm_type(context, field_node, generator.scope);
+        target_ptr = llvm::build_struct_gep2(generator.llvm_builder, type_info.llvm_type, instance_ptr, field_index, "");
+        base_group = lookup::get_base_type_group(context, field_node, generator.scope);
+    } else {
+        highlighter::panic("generate_suffix only supports IDENT and ACCESS for now");
+    }
+
+    LLVMValueRef old_value = llvm::build_load_2(generator.llvm_builder, llvm_type, target_ptr, "");
+    LLVMValueRef new_value;
+
+    switch (node.suffix_node.operator.type) {
+    case TokenType.PLUS:
+        if (base_group == "pointer") {
+            LLVMTypeRef  elem_type = lookup::get_pointee_llvm_type(context, node.suffix_node.node, generator.scope);
+            LLVMValueRef one       = create_int(llvm::int_type(32), 1);
+
+            new_value = llvm::build_gep2(generator.llvm_builder, elem_type, old_value, &one, 1, "");
+        } else {
+            LLVMValueRef one = create_int(llvm::int_type(32), 1);
+
+            new_value = llvm::build_add(generator.llvm_builder, old_value, one, "");
+        }
+    case TokenType.MINUS:
+        if (base_group == "pointer") {
+            LLVMTypeRef  elem_type = lookup::get_pointee_llvm_type(context, node.suffix_node.node, generator.scope);
+            LLVMValueRef neg_one   = create_int(llvm::int_type(32), -1);
+
+            new_value = llvm::build_gep2(generator.llvm_builder, elem_type, old_value, &neg_one, 1, "");
+        } else {
+            LLVMValueRef one = llvm::const_int(llvm_type, 1, llvm::FALSE);
+
+            new_value = llvm::build_sub(generator.llvm_builder, old_value, one, "");
+        }
+    case TokenType.BANG:
+        new_value = llvm::build_not(generator.llvm_builder, old_value, "");
+    default:
+        highlighter::panic();
+    }
+
+    llvm::build_store(generator.llvm_builder, new_value, target_ptr);
+
+    return old_value;
+}
+
+fn LLVMValueRef generate_assign(Generator* generator, CompileContext* context, Node* node) {
+    LLVMValueRef target_ptr;
+    Node*        target = node.assign_node.node;
+
+    if (target.type == NodeType.IDENT) {
+        VariableInfo* variable_info = scope::get_variable(generator.scope, target.ident_node.name);
+
+        target_ptr = variable_info.llvm_value;
+    } else if (target.type == NodeType.ACCESS) {
+        String        name          = target.access_node.name.path_node.path;
+        VariableInfo* variable_info = scope::get_variable(generator.scope, name);
+        String        access_group  = lookup::get_base_type_group(context, variable_info.node, generator.scope);
+        String        type_name     = lookup::get_type_name(context, variable_info.node, generator.scope);
+
+        if (access_group == "pointer") {
+            type_name = type_name[:type_name.len - 1];
+        }
+
+        TypeInfo*    type_info    = lookup::get_type_info(context, type_name);
+        LLVMValueRef instance_ptr = variable_info.llvm_value;
+
+        if (access_group == "pointer") {
+            LLVMTypeRef ptr_llvm_type = lookup::get_llvm_type(context, variable_info.node, generator.scope);
+
+            instance_ptr = llvm::build_load_2(generator.llvm_builder, ptr_llvm_type, instance_ptr, "");
+        }
+
+        String   field_name = target.access_node.next.ident_node.name;
+        NodeList fields      = lookup::get_type_fields(context, type_info, generator.scope);
+
+        uint field_index = 0;
+        foreach (uint i, Node* field : fields) {
+            if (field.parameter_node.name.ident_node.name == field_name) {
+                field_index = i;
+                break;
+            }
+        }
+
+        target_ptr = llvm::build_struct_gep2(generator.llvm_builder, type_info.llvm_type, instance_ptr, field_index, "");
+    } else if (target.type == NodeType.DEREFERENCE) {
+        target_ptr = generate_node(generator, context, target.dereference_node.node);
+    } else {
+        highlighter::panic("generate_assign only supports IDENT, ACCESS, and DEREFERENCE for now");
+    }
+
+    LLVMValueRef value = generate_node(generator, context, node.assign_node.expr);
+
+    llvm::build_store(generator.llvm_builder, value, target_ptr);
+
+    return value;
 }
 
 fn LLVMValueRef traverse_access_module(Generator* generator, CompileContext* context, Node* node) => @pool() {
@@ -615,11 +787,24 @@ fn LLVMValueRef traverse_access_module(Generator* generator, CompileContext* con
 fn LLVMValueRef traverse_access_variable(Generator* generator, CompileContext* context, Node* node) => @pool() {
     String        name          = node.access_node.name.path_node.path;
     VariableInfo* variable_info = scope::get_variable(generator.scope, name);
+    String        base_group    = lookup::get_base_type_group(context, variable_info.node, generator.scope);
 
-    String    type_name = lookup::get_type_name(context, variable_info.node, generator.scope);
-    TypeInfo* type_info = lookup::get_type_info(context, type_name);
+    String type_name = lookup::get_type_name(context, variable_info.node, generator.scope);
 
-    return traverse_access_field(generator, context, node, type_info, variable_info.llvm_value);
+    if (base_group == "pointer") {
+        type_name = type_name[:type_name.len - 1];
+    }
+
+    TypeInfo*    type_info = lookup::get_type_info(context, type_name);
+    LLVMValueRef base      = variable_info.llvm_value;
+
+    if (base_group == "pointer") {
+        LLVMTypeRef ptr_llvm_type = lookup::get_llvm_type(context, variable_info.node, generator.scope);
+
+        base = llvm::build_load_2(generator.llvm_builder, ptr_llvm_type, base, "");
+    }
+
+    return traverse_access_field(generator, context, node, type_info, base);
 }
 
 fn LLVMValueRef traverse_access_field(Generator* generator, CompileContext* context, Node* node, TypeInfo* type_info, LLVMValueRef instance_ptr) => @pool() {
@@ -636,7 +821,7 @@ fn LLVMValueRef traverse_access_field(Generator* generator, CompileContext* cont
         }
     }
 
-    LLVMTypeRef  field_llvm_type = lookup::get_llvm_type(context, field_node);
+    LLVMTypeRef  field_llvm_type = lookup::get_llvm_type(context, field_node, generator.scope);
     LLVMValueRef field_ptr       = llvm::build_struct_gep2(generator.llvm_builder, type_info.llvm_type, instance_ptr, field_index, "");
 
     return llvm::build_load_2(generator.llvm_builder, field_llvm_type, field_ptr, "");

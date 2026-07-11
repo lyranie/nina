@@ -1,19 +1,31 @@
 mod test.main;
 
-// use intlist;
+use intlist;
+use libc;
+use std.io;
 
 int main() {
-    // intlist.IntList arr = intlist.create(4);
-    // intlist.add(arr, 5);
+    intlist.IntList list = intlist.create(5);
+    intlist.add(&list, 69);
+    intlist.add(&list, 420);
+    intlist.add(&list, 67);
+    intlist.add(&list, 42);
 
-    int i = 5;
-    int* j = &i;
-    int k = *j;
+    std.io.printn("Before:");
+    std.io.printn("");
+    libc.printf("%d\n", intlist.get(&list, 0));
+    libc.printf("%d\n", intlist.get(&list, 1));
+    libc.printf("%d\n", intlist.get(&list, 2));
+    libc.printf("%d\n", intlist.get(&list, 3));
 
-    libc.printf("%d\n", i);
-    libc.printf("%p\n", j);
-    libc.printf("%d\n", *j);
-    libc.printf("%d\n", k);
+    intlist.remove(&list, 2);
+
+    std.io.printn("After:");
+    std.io.printn("");
+    libc.printf("%d\n", intlist.get(&list, 0));
+    libc.printf("%d\n", intlist.get(&list, 1));
+    libc.printf("%d\n", intlist.get(&list, 2));
+    libc.printf("%d\n", intlist.get(&list, 3));
 
     ret 0;
 }

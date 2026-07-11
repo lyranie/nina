@@ -61,13 +61,13 @@ fn void register_functions(CompileContext* context, Node* node) {
         String fn_name  = node.function_node.name.ident_node.name;
         String name     = string::format(context.alloc, "%s.%s", mod_name, fn_name);
 
-        LLVMTypeRef return_type = lookup::get_llvm_type(context, node.function_node.type);
+        LLVMTypeRef return_type = lookup::get_llvm_type(context, node.function_node.type, null);
     
         List{LLVMTypeRef} parameters;
         parameters.tinit();
 
         foreach (Node* parameter : node.function_node.parameters) {
-            LLVMTypeRef llvm_parameter_type = lookup::get_llvm_type(context, parameter);
+            LLVMTypeRef llvm_parameter_type = lookup::get_llvm_type(context, parameter, null);
             parameters.push(llvm_parameter_type);
         }
 
@@ -94,7 +94,7 @@ fn void register_functions(CompileContext* context, Node* node) {
         String ext_name = node.ext_node.name.ident_node.name;
         String name     = string::format(context.alloc, "%s.%s", mod_name, ext_name);
     
-        LLVMTypeRef return_type = lookup::get_llvm_type(context, node.function_node.type);
+        LLVMTypeRef return_type = lookup::get_llvm_type(context, node.function_node.type, null);
 
         List{LLVMTypeRef} parameters;
         parameters.tinit();
@@ -107,7 +107,7 @@ fn void register_functions(CompileContext* context, Node* node) {
                 continue;
             }
 
-            LLVMTypeRef llvm_parameter_type = lookup::get_llvm_type(context, parameter);
+            LLVMTypeRef llvm_parameter_type = lookup::get_llvm_type(context, parameter, null);
             parameters.push(llvm_parameter_type);
         }
         

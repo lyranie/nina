@@ -230,6 +230,8 @@ fn NodeList parse_compound(Parser* parser, CompileContext* context, Lexer* lexer
             statements.push(parse_identifier_statement(parser, context, lexer));
         case TokenType.KW_IF:
             statements.push(parse_if(parser, context, lexer));
+        case TokenType.ASTERISK:
+            statements.push(parse_assign_or_expr_statement(parser, context, lexer));
         default:
             highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
         }
@@ -294,33 +296,31 @@ fn Node* parse_factor(Parser* parser, CompileContext* context, Lexer* lexer) {
     Node* node = null;
 
     switch (parser.current.type) {
-    case TokenType.INT:
-        node = parse_int(parser, context, lexer);
+    case TokenType.INT:    node = parse_int(parser, context, lexer);
     case TokenType.TRUE:
-    case TokenType.FALSE:
-        node = parse_bool(parser, context, lexer);
-    case TokenType.STRING:
-        node = parse_string(parser, context, lexer);
-    case TokenType.IDENT:
-        node = parse_identifier_expr(parser, context, lexer);
+    case TokenType.FALSE:  node = parse_bool(parser, context, lexer);
+    case TokenType.STRING: node = parse_string(parser, context, lexer);
+    case TokenType.IDENT:  node = parse_identifier_expr(parser, context, lexer);
     case TokenType.LPAREN:
+        Range start = parser.current.range.start;
         consume(parser, context, lexer, TokenType.LPAREN);
 
         node = parse_expr(parser, context, lexer);
+        node.range.from = start;
+        node.range.to   = parser.current.range.end;
 
         consume(parser, context, lexer, TokenType.RPAREN);
-
-        return node;
     case TokenType.PLUS:
-    case TokenType.MINUS:
-        node = parse_unary(parser, context, lexer);
-    case TokenType.KW_NEW:
-        node = parse_init(parser, context, lexer);
-    case TokenType.NULL:
-        node = parse_null(parser, context, lexer);
+    case TokenType.MINUS:    node = parse_unary(parser, context, lexer);
+    case TokenType.KW_NEW:   node = parse_init(parser, context, lexer);
+    case TokenType.NULL:     node = parse_null(parser, context, lexer);
+    case TokenType.AMP:      node = parse_reference(parser, context, lexer);
+    case TokenType.ASTERISK: node = parse_dereference(parser, context, lexer);
     default:
         highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Expression expected, got '%s'", parser.current.type);
     }
+
+    node = try_parse_suffix(parser, context, lexer, node);
 
     return node;
 }
@@ -376,11 +376,7 @@ fn Node* parse_identifier_statement(Parser* parser, CompileContext* context, Lex
         parser.cursor  = mark_start.cursor;
         parser.current = mark_start.current;
 
-        Node* node = parse_access(parser, context, lexer);
-
-        consume(parser, context, lexer, TokenType.SEMI);
-
-        return node;
+        return parse_assign_or_expr_statement(parser, context, lexer);
     default:
         return parse_variable(parser, context, lexer);
     }
@@ -643,6 +639,84 @@ fn Node* parse_null(Parser* parser, CompileContext* context, Lexer* lexer) {
     Range end = peek(parser, lexer, -1).range.end;
 
     return @make_node(context, NodeType.NULL, start, end; node) {};
+}
+
+fn Node* parse_reference(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.AMP);
+
+    Node* expr = parse_expr(parser, context, lexer);
+    Range end  = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.REFERENCE, start, end; node) {
+        node.reference_node.node = expr;
+    };
+}
+
+fn Node* parse_dereference(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.ASTERISK);
+
+    Node* expr = parse_factor(parser, context, lexer);
+    Range end  = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.DEREFERENCE, start, end; node) {
+        node.dereference_node.node = expr;
+    };
+}
+
+fn Node* try_parse_suffix(Parser* parser, CompileContext* context, Lexer* lexer, Node* node) {
+    if ((parser.current.type == TokenType.PLUS  ||
+        parser.current.type == TokenType.MINUS ||
+        parser.current.type == TokenType.BANG) &&
+        peek(parser, lexer).type == parser.current.type) {
+        Token operator = parser.current;
+
+        consume(parser, context, lexer, operator.type);
+        consume(parser, context, lexer, operator.type);
+
+        operator.value = string::format(context.alloc, "%s%s", operator.value, operator.value);
+        operator.range.end.column++;
+
+        Range start = node.range.from;
+        Range end   = operator.range.end;
+
+        Node* expr = alloc::new(context.alloc, Node);
+        *expr = *node;
+
+        node = @make_node(context, NodeType.SUFFIX, start, end; _node) {
+            _node.suffix_node.operator = operator;
+            _node.suffix_node.node     = expr;
+        };
+    }
+
+    return node;
+}
+
+fn Node* parse_assign_or_expr_statement(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start  = parser.current.range.start;
+    Node* target = parse_expr(parser, context, lexer);
+
+    if (parser.current.type == TokenType.EQUALS) {
+        consume(parser, context, lexer, TokenType.EQUALS);
+
+        Node* expr = parse_expr(parser, context, lexer);
+        Range end  = parser.current.range.end;
+
+        consume(parser, context, lexer, TokenType.SEMI);
+
+        return @make_node(context, NodeType.ASSIGN, start, end; node) {
+            node.assign_node.node = target;
+            node.assign_node.expr = expr;
+        };
+    }
+
+    target = try_parse_suffix(parser, context, lexer, target);
+    consume(parser, context, lexer, TokenType.SEMI);
+
+    return target;
 }
 
 fn void consume(Parser* parser, CompileContext* context, Lexer* lexer, TokenType type) {

@@ -119,6 +119,7 @@ enum TokenType {
     LTE,
     LANGLE,
     RANGLE,
+    BANG,
 }
 
 struct Parser {
@@ -224,6 +225,20 @@ struct Node {
             Node*    name;
             NodeList arguments;
         }
+        struct reference_node {
+            Node* node;
+        }
+        struct dereference_node {
+            Node* node;
+        }
+        struct suffix_node {
+            Token operator;
+            Node* node;
+        }
+        struct assign_node {
+            Node* node;
+            Node* expr;
+        }
     }
 }
 
@@ -249,6 +264,10 @@ enum NodeType {
     STRUCT,
     INIT,
     NULL,
+    REFERENCE,
+    DEREFERENCE,
+    SUFFIX,
+    ASSIGN,
 }
 
 struct Registry {

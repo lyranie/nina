@@ -3,3 +3,5 @@ mod libc;
 ext int   printf(char* fmt, args...);
 ext void* malloc(int size);
 ext void* memcpy(void* dst, void* src, int len);
+ext void* memset(void* dst, int value, int len);
+ext void* realloc(void* ptr, int size);

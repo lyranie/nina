@@ -30,44 +30,29 @@ fn void analyse(Analyser* analyser, CompileContext* context) {
 
 fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, void* data = null) {
     switch (node.type) {
-    case NodeType.MOD:
-        analyse_mod(analyser, context, node);
-    case NodeType.FUNCTION:
-        analyse_function(analyser, context, node);
-    case NodeType.TYPE:
-        analyse_type(analyser, context, node);
-    case NodeType.RET:
-        analyse_ret(analyser, context, node, data);
-    case NodeType.INT:
-        break;
-    case NodeType.EXT:
-        analyse_ext(analyser, context, node);
-    case NodeType.CALL:
-        analyse_call(analyser, context, node);
-    case NodeType.BOOL:
-        break;
-    case NodeType.STRING:
-        break;
-    case NodeType.BIN:
-        analyse_bin(analyser, context, node, data);
-    case NodeType.IDENT:
-        analyse_ident(analyser, context, node);
-    case NodeType.VARIABLE:
-        analyse_variable(analyser, context, node);
-    case NodeType.USE:
-        analyse_use(analyser, context, node);
-    case NodeType.ACCESS:
-        analyse_access(analyser, context, node);
-    case NodeType.UNARY:
-        analyse_unary(analyser, context, node);
-    case NodeType.IF:
-        analyse_if(analyser, context, node, data);
-    case NodeType.STRUCT:
-        analyse_struct(analyser, context, node);
-    case NodeType.INIT:
-        analyse_init(analyser, context, node);
-    case NodeType.NULL:
-        break;
+    case NodeType.MOD:         analyse_mod(analyser, context, node);
+    case NodeType.FUNCTION:    analyse_function(analyser, context, node);
+    case NodeType.TYPE:        analyse_type(analyser, context, node);
+    case NodeType.RET:         analyse_ret(analyser, context, node, data);
+    case NodeType.INT:         break;
+    case NodeType.EXT:         analyse_ext(analyser, context, node);
+    case NodeType.CALL:        analyse_call(analyser, context, node);
+    case NodeType.BOOL:        break;
+    case NodeType.STRING:      break;
+    case NodeType.BIN:         analyse_bin(analyser, context, node, data);
+    case NodeType.IDENT:       analyse_ident(analyser, context, node);
+    case NodeType.VARIABLE:    analyse_variable(analyser, context, node);
+    case NodeType.USE:         analyse_use(analyser, context, node);
+    case NodeType.ACCESS:      analyse_access(analyser, context, node);
+    case NodeType.UNARY:       analyse_unary(analyser, context, node);
+    case NodeType.IF:          analyse_if(analyser, context, node, data);
+    case NodeType.STRUCT:      analyse_struct(analyser, context, node);
+    case NodeType.INIT:        analyse_init(analyser, context, node);
+    case NodeType.NULL:        break;
+    case NodeType.REFERENCE:   analyse_reference(analyser, context, node);
+    case NodeType.DEREFERENCE: analyse_dereference(analyser, context, node);
+    case NodeType.SUFFIX:      analyse_suffix(analyser, context, node);
+    case NodeType.ASSIGN:      analyse_assign(analyser, context, node);
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -224,7 +209,13 @@ fn void analyse_bin(Analyser* analyser, CompileContext* context, Node* node, voi
     analyse_node(analyser, context, node.bin_node.left, data);
     analyse_node(analyser, context, node.bin_node.right, data);
 
-    if (!lookup::compare_type(context, node.bin_node.left, node.bin_node.right, analyser.scope)) {
+    String left_group  = lookup::get_base_type_group(context, node.bin_node.left, analyser.scope);
+    String right_group = lookup::get_base_type_group(context, node.bin_node.right, analyser.scope);
+
+    bool pointer_arith = (left_group == "pointer" && right_group == "integer")
+        && (node.bin_node.operator.type == TokenType.PLUS || node.bin_node.operator.type == TokenType.MINUS);
+
+    if (!pointer_arith && !lookup::compare_type(context, node.bin_node.left, node.bin_node.right, analyser.scope)) {
         String left_type  = lookup::get_type_name(context, node.bin_node.left, analyser.scope);
         String right_type = lookup::get_type_name(context, node.bin_node.right, analyser.scope);
 
@@ -428,6 +419,50 @@ fn void analyse_init(Analyser* analyser, CompileContext* context, Node* node) {
     }
 }
 
+fn void analyse_reference(Analyser* analyser, CompileContext* context, Node* node) {
+    analyse_node(analyser, context, node.reference_node.node);
+}
+
+fn void analyse_dereference(Analyser* analyser, CompileContext* context, Node* node) {
+    analyse_node(analyser, context, node.reference_node.node);
+
+    if (lookup::get_base_type_group(context, node.dereference_node.node, analyser.scope) != "pointer") {
+        String type_name = lookup::get_type_name(context, node, analyser.scope);
+
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot dereference value of type '%s'", type_name);
+    }
+}
+
+fn void analyse_suffix(Analyser* analyser, CompileContext* context, Node* node) {
+    String base_group = lookup::get_base_type_group(context, node.suffix_node.node, analyser.scope);
+
+    switch (node.suffix_node.operator.type) {
+    case TokenType.PLUS:
+    case TokenType.MINUS:
+        if (base_group != "integer" && base_group != "pointer") {
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot apply operator '%s' to type group '%s'", node.suffix_node.operator.value, base_group);
+        }
+    case TokenType.BANG:
+        if (base_group != "boolean") {
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot apply operator '%s' to type group '%s'", node.suffix_node.operator.value, base_group);
+        }
+    default:
+        highlighter::panic();
+    }
+}
+
+fn void analyse_assign(Analyser* analyser, CompileContext* context, Node* node) {
+    analyse_node(analyser, context, node.assign_node.node, null);
+    analyse_node(analyser, context, node.assign_node.expr, null);
+
+    if (!lookup::compare_type(context, node.assign_node.node, node.assign_node.expr, analyser.scope)) {
+        String target_type = lookup::get_type_name(context, node.assign_node.node, analyser.scope);
+        String expr_type    = lookup::get_type_name(context, node.assign_node.expr, analyser.scope);
+
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot assign type '%s' to type '%s'", expr_type, target_type);
+    }
+}
+
 fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
     String name = node.access_node.name.path_node.path;
     
@@ -483,12 +518,18 @@ fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node
 fn void traverse_access_variable(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
     String        name          = node.access_node.name.path_node.path;
     VariableInfo* variable_info = scope::get_variable(analyser.scope, name);
+    String        base_group    = lookup::get_base_type_group(context, variable_info.node, analyser.scope);
 
-    if (lookup::get_base_type_group(context, variable_info.node, analyser.scope) != "struct") {
-        highlighter::panic("type group is %s", lookup::get_base_type_group(context, variable_info.node, analyser.scope));
+    if (base_group != "struct" && base_group != "pointer") {
+        highlighter::panic("type group is %s", base_group);
     }
 
-    String    type_name = lookup::get_type_name(context, variable_info.node, analyser.scope);
+    String type_name = lookup::get_type_name(context, variable_info.node, analyser.scope);
+
+    if (base_group == "pointer") {
+        type_name = type_name[:type_name.len - 1];
+    }
+
     TypeInfo* type_info = lookup::get_type_info(context, type_name);
 
     traverse_access_field(analyser, context, node, type_info);

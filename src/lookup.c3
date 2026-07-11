@@ -36,13 +36,12 @@ fn void register_type(Lookup* lookup, Allocator alloc, String name, String filep
     lookup.set(name, type);
 }
 
-fn LLVMTypeRef get_llvm_type(CompileContext* context, Node* node) {
+fn LLVMTypeRef get_llvm_type(CompileContext* context, Node* node, Scope* scope) {
     switch (node.type) {
     case NodeType.TYPE:
         String type_name   = node.type_node.name.ident_node.name;
         String type_suffix = node.type_node.suffix;
 
-        // if type from other module
         TypeInfo*   type_info = get_type_info(context, type_name);
         LLVMTypeRef llvm_type = type_info.llvm_type;
 
@@ -62,7 +61,7 @@ fn LLVMTypeRef get_llvm_type(CompileContext* context, Node* node) {
             llvm_fields.tinit();
             
             foreach (Node* field : type_info.node.struct_node.fields) {
-                llvm_fields.push(get_llvm_type(context, field.parameter_node.type));
+                llvm_fields.push(get_llvm_type(context, field.parameter_node.type, scope));
             }
 
             llvm::struct_set_body(llvm_type, llvm_fields.to_array(context.alloc), (CUInt)llvm_fields.len(), llvm::FALSE);
@@ -70,13 +69,89 @@ fn LLVMTypeRef get_llvm_type(CompileContext* context, Node* node) {
 
         return llvm_type;
     case NodeType.PARAMETER:
-        return get_llvm_type(context, node.parameter_node.type);
+        return get_llvm_type(context, node.parameter_node.type, scope);
     case NodeType.VARIABLE:
-        return get_llvm_type(context, node.variable_node.type);
+        return get_llvm_type(context, node.variable_node.type, scope);
+    case NodeType.REFERENCE:
+        LLVMTypeRef llvm_type = get_llvm_type(context, node.reference_node.node, scope);
+
+        return llvm::pointer_type(llvm_type, 0);
+    case NodeType.IDENT:
+        String name = node.ident_node.name;
+
+        return get_llvm_type(context, scope::get_variable(scope, name).node, scope);
+    case NodeType.DEREFERENCE:
+        return get_pointee_llvm_type(context, node.dereference_node.node, scope);
+    case NodeType.ACCESS:
+        String        name          = node.access_node.name.path_node.path;
+        VariableInfo* variable_info = scope::get_variable(scope, name);
+        String        base_group    = get_base_type_group(context, variable_info.node, scope);
+
+        String type_name = get_type_name(context, variable_info.node, scope);
+
+        if (base_group == "pointer") {
+            type_name = type_name[:type_name.len - 1];
+        }
+
+        TypeInfo* type_info = get_type_info(context, type_name);
+        NodeList  fields     = get_type_fields(context, type_info, scope);
+        String    field_name = node.access_node.next.ident_node.name;
+
+        Node* field_node;
+        foreach (Node* field : fields) {
+            if (field.parameter_node.name.ident_node.name == field_name) {
+                field_node = field;
+                break;
+            }
+        }
+
+        return get_llvm_type(context, field_node.parameter_node.type, scope);
+    case NodeType.BIN:
+        return get_llvm_type(context, node.bin_node.left, scope);
     default:
-        io::eprintfn("Missing get_llvm_type case for type '%s'", node.type);
-        os::exit(1);
+        highlighter::panic("Missing get_llvm_type case for type '%s'", node.type);
     }
+}
+
+fn LLVMTypeRef get_pointee_llvm_type(CompileContext* context, Node* node, Scope* scope) {
+    Node* inner = node;
+
+    while (inner.type == NodeType.IDENT) {
+        inner = scope::get_variable(scope, inner.ident_node.name).node;
+    }
+
+    if (inner.type == NodeType.VARIABLE) {
+        inner = inner.variable_node.type;
+    } else if (inner.type == NodeType.PARAMETER) {
+        inner = inner.parameter_node.type;
+    } else if (inner.type == NodeType.ACCESS) {
+        String        access_name     = inner.access_node.name.path_node.path;
+        VariableInfo* access_var_info = scope::get_variable(scope, access_name);
+        String        access_group    = get_base_type_group(context, access_var_info.node, scope);
+        String        type_name       = get_type_name(context, access_var_info.node, scope);
+
+        if (access_group == "pointer") {
+            type_name = type_name[:type_name.len - 1];
+        }
+
+        TypeInfo* type_info  = get_type_info(context, type_name);
+        NodeList  fields      = get_type_fields(context, type_info, scope);
+        String    field_name  = inner.access_node.next.ident_node.name;
+
+        foreach (Node* field : fields) {
+            if (field.parameter_node.name.ident_node.name == field_name) {
+                inner = field.parameter_node.type;
+                break;
+            }
+        }
+    } else if (inner.type == NodeType.BIN) {
+        return get_pointee_llvm_type(context, inner.bin_node.left, scope);
+    }
+
+    Node cloned = *inner;
+    cloned.type_node.suffix = cloned.type_node.suffix[:cloned.type_node.suffix.len - 1];
+
+    return get_llvm_type(context, &cloned, scope);
 }
 
 fn LLVMMetadataRef get_llvm_debug_type(Allocator alloc, Generator* generator, Lookup* lookup, Node* node) => @pool() {
@@ -105,8 +180,7 @@ fn LLVMMetadataRef get_llvm_debug_type(Allocator alloc, Generator* generator, Lo
     case NodeType.PARAMETER:
         return get_llvm_debug_type(alloc, generator, lookup, node.parameter_node.type);
     default:
-        io::eprintfn("Missing get_llvm_debug_type case for type '%s'", node.type);
-        os::exit(1);
+        highlighter::panic("Missing get_llvm_debug_type case for type '%s'", node.type);
     }
 }
 
@@ -217,6 +291,12 @@ fn String get_type_name(CompileContext* context, Node* node, Scope* scope) {
         }
 
         return "void";
+    case NodeType.REFERENCE:
+        return string::format(context.alloc, "%s*", get_type_name(context, node.reference_node.node, scope));
+    case NodeType.DEREFERENCE:
+        String type_name = get_type_name(context, node.dereference_node.node, scope);
+
+        return type_name[:type_name.len - 1];
     default:
         highlighter::panic("Missing get_type_name case for type '%s'", node.type);
     }
@@ -232,7 +312,7 @@ fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope)
         return "anytype";
     case NodeType.TYPE:
         String       type_name      = node.type_node.name.ident_node.name;
-        LLVMTypeRef  llvm_type      = get_llvm_type(context, node);
+        LLVMTypeRef  llvm_type      = get_llvm_type(context, node, scope);
         LLVMTypeKind llvm_type_kind = llvm::get_type_kind(llvm_type);
 
         switch (llvm_type_kind) {
@@ -303,6 +383,28 @@ fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope)
         return node.init_node.name.path_node.path;
     case NodeType.NULL:
         return "pointer";
+    case NodeType.REFERENCE:
+        return "pointer";
+    case NodeType.DEREFERENCE:
+        LLVMTypeRef  pointee_llvm_type = get_pointee_llvm_type(context, node.dereference_node.node, scope);
+        LLVMTypeKind pointee_type_kind = llvm::get_type_kind(pointee_llvm_type);
+
+        switch (pointee_type_kind) {
+        case LLVMTypeKind.INTEGER_TYPE_KIND:
+            CUInt width = llvm::get_int_type_width(pointee_llvm_type);
+
+            if (width == 1) {
+                return "boolean";
+            }
+
+            return "integer";
+        case LLVMTypeKind.POINTER_TYPE_KIND:
+            return "pointer";
+        case LLVMTypeKind.STRUCT_TYPE_KIND:
+            return "struct";
+        default:
+            highlighter::panic("Missing get_base_type_group#DEREFERENCE case for type kind '%s'", pointee_type_kind);
+        }
     default:
         highlighter::panic("Missing get_base_type_group case for type '%s'", node.type);
     }
@@ -320,8 +422,14 @@ fn NodeList get_type_fields(CompileContext* context, TypeInfo* type_info, Scope*
 fn String traverse_access_variable(CompileContext* context, Node* node, Scope* scope) => @pool() {
     String        name          = node.access_node.name.path_node.path;
     VariableInfo* variable_info = scope::get_variable(scope, name);
+    String        base_group    = get_base_type_group(context, variable_info.node, scope);
 
-    String    type_name = lookup::get_type_name(context, variable_info.node, scope);
+    String type_name = get_type_name(context, variable_info.node, scope);
+
+    if (base_group == "pointer") {
+        type_name = type_name[:type_name.len - 1];
+    }
+
     TypeInfo* type_info = get_type_info(context, type_name);
 
     return traverse_access_field(context, node, scope, type_info);
@@ -412,8 +520,14 @@ fn String traverse_access_module(CompileContext* context, Node* node, Scope* sco
 fn String traverse_access_variable_base_group(CompileContext* context, Node* node, Scope* scope) => @pool() {
     String        name          = node.access_node.name.path_node.path;
     VariableInfo* variable_info = scope::get_variable(scope, name);
+    String        base_group    = lookup::get_base_type_group(context, variable_info.node, scope);
 
-    String    type_name = lookup::get_type_name(context, variable_info.node, scope);
+    String type_name = lookup::get_type_name(context, variable_info.node, scope);
+
+    if (base_group == "pointer") {
+        type_name = type_name[:type_name.len - 1];
+    }
+
     TypeInfo* type_info = get_type_info(context, type_name);
 
     return traverse_access_field_base_group(context, node, scope, type_info);

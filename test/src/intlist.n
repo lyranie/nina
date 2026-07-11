@@ -1,34 +1,54 @@
 mod intlist;
 
 use libc;
+use std.io;
 
-/*
- * IntList; default size is 0; reallocates on add/remove
- *
- * @param entries The pointer to the stored entries
- * @param num_entries The current amount of entries stored
- */
-type IntList(int* entries, int num_entries);
-
-// List<int> list = new List<int>(1);
+type IntList(int* entries, int num_entries, int size);
 
 IntList create(int default_size) {
     int* entries = libc.malloc(4 * default_size);
+    libc.memset(entries, 0, 4 * default_size);
 
-    ret new IntList(entries, 0);
+    ret new IntList(entries, 0, default_size);
 }
 
-void add(IntList list, int i) {
-    // if (i + 1 >= list.num_entries) {
-        // realloc
-    // }
+void add(IntList* list, int i) {
+    if (i + 1 >= list.num_entries) {
+        list.size    = list.size * 2;
+        list.entries = libc.realloc(list.entries, 4 * list.size);
+    }
 
-    // 4 is the size of 1 element
-    // int  offset = 4 * list.num_entries;
-    // int* dst    = list.entries + offset;
+    int* dst = list.entries + list.num_entries;
 
-    int* src = libc.malloc(4);
-    // store i later
+    libc.memcpy(dst, &i, 4);
+    list.num_entries++;
+}
 
-    libc.memcpy(list.entries, src, 4);
+int get(IntList* list, int i) {
+    if (i >= list.size) {
+        std.io.printn("balls");
+        ret 0;
+    }
+
+    ret *(list.entries + i);
+}
+
+bool remove(IntList* list, int i) {
+    if (i >= list.num_entries) {
+        std.io.printn("balls");
+        ret false;
+    }
+
+    int* dst   = list.entries + i;
+    int* src   = list.entries + i + 1;
+    int  count = list.num_entries - i - 1;
+
+    libc.memcpy(dst, src, 4 * count);
+
+    int* last = list.entries + list.num_entries - 1;
+    libc.memset(last, 0, 4);
+
+    list.num_entries--;
+
+    ret true;
 }

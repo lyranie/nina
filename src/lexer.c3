@@ -101,6 +101,7 @@ fn void tokenize(Lexer* lexer, CompileContext* context) {
             case '.': make_token(lexer, TokenType.PERIOD, ".");
             case ',': make_token(lexer, TokenType.COMMA, ",");
             case '&': make_token(lexer, TokenType.AMP, "&");
+            case '!': make_token(lexer, TokenType.BANG, "!");
             }
         }
 
