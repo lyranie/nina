@@ -129,7 +129,7 @@ fn void node_free(Node* node, Allocator alloc) {
             node_free(field, alloc);
         }
     case NodeType.INIT:
-        node_free(node.struct_node.name, alloc);
+        node_free(node.init_node.name, alloc);
 
         foreach (Node* argument : node.init_node.arguments) {
             node_free(argument, alloc);
