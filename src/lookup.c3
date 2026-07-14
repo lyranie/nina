@@ -509,6 +509,8 @@ fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope)
         }
     case NodeType.REAL:
         return "real";
+    case NodeType.EXT:
+        return get_base_type_group(context, node.ext_node.type, scope);
     default:
         highlighter::panic("Missing get_base_type_group case for type '%s'", node.type);
     }

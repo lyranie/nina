@@ -1,0 +1,2 @@
+[ ] hex integers
+[ ] bitwise operations
