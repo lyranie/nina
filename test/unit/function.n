@@ -7,4 +7,5 @@ void test() {
 define void @test.function.test() {
 entry:
   ret void
+  unreachable
 }

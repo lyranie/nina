@@ -17,34 +17,36 @@ fn Registry* create(Allocator alloc) {
     return registry;
 }
 
-fn void register(CompileContext* context, Parser* parser) {
+fn void register_types(CompileContext* context, Node* node) {
     String        mod         = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
     LLVMModuleRef llvm_module = llvm::module_create_with_name((CChar*)mod.ptr);
 
     context.modules.set(context.current_file, llvm_module);
 
-    register_types(context, context.trees.get(context.current_file))!!;
-    register_functions(context, context.trees.get(context.current_file))!!;
+    _register_types(context, node);
 }
 
-fn void register_types(CompileContext* context, Node* node) {
+fn void register_functions(CompileContext* context, Node* node) {
+    _register_functions(context, node);
+}
+
+fn void _register_types(CompileContext* context, Node* node) {
     switch (node.type) {
     case NodeType.STRUCT:
         String mod_name  = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
         String type_name = node.struct_node.name.ident_node.name;
         String name      = string::format(context.alloc, "%s.%s", mod_name, type_name);
-        
+
         LLVMTypeRef llvm_struct_type = llvm::struct_create_named(context.llvm_context, (CChar*)name.ptr);
 
         TypeInfo* type_info = alloc::new(context.alloc, TypeInfo);
+        type_info.name       = type_name;
         type_info.mod        = mod_name;
         type_info.file       = context.current_file;
         type_info.node       = node;
         type_info.llvm_type  = llvm_struct_type;
 
         context.registry.types.set(name, type_info);
-
-        lookup::register_type(context.lookup, context.alloc, type_name, context.current_file, node, llvm_struct_type);
     case NodeType.MOD:
         foreach (Node* statement : node.mod_node.statements) {
             register_types(context, statement);
@@ -54,7 +56,7 @@ fn void register_types(CompileContext* context, Node* node) {
     }
 }
 
-fn void register_functions(CompileContext* context, Node* node) {
+fn void _register_functions(CompileContext* context, Node* node) {
     switch (node.type) {
     case NodeType.FUNCTION:
         String mod_name = context.trees.get(context.current_file).mod_node.path.path_node.path!!;

@@ -13,4 +13,5 @@ entry:
   %test = alloca ptr, align 8
   store ptr @0, ptr %test, align 8
   ret void
+  unreachable
 }

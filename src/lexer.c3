@@ -102,6 +102,7 @@ fn void tokenize(Lexer* lexer, CompileContext* context) {
             case ',': make_token(lexer, TokenType.COMMA, ",");
             case '&': make_token(lexer, TokenType.AMP, "&");
             case '!': make_token(lexer, TokenType.BANG, "!");
+            case ':': make_token(lexer, TokenType.COLON, ":");
             }
         }
 
@@ -181,6 +182,8 @@ fn void word(Lexer* lexer, CompileContext* context) => @pool() {
     case "type":  type = TokenType.KW_TYPE;
     case "new":   type = TokenType.KW_NEW;
     case "null":  type = TokenType.NULL;
+    case "while": type = TokenType.KW_WHILE;
+    case "base":  type = TokenType.KW_BASE;
     default:      type = TokenType.IDENT;
     }
 
@@ -212,7 +215,12 @@ fn void number(Lexer* lexer, CompileContext* context) => @pool() {
         number.append(".");
         consume(lexer, column: true);
 
-        @todo("error if no number after '.' e.g. `12.`");
+        if (!lexer.current.is_digit()) {
+            Range to = lexer.range;
+            to.column++;
+
+            highlighter::error(context, context.current_file, lexer.range, to, "Expected another digit");
+        }
 
         while (lexer.current.is_digit() || lexer.current == '_') {
             number.append(lexer.current);

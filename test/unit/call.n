@@ -11,10 +11,12 @@ void test() {
 define void @test.call.other() {
 entry:
   ret void
+  unreachable
 }
 
 define void @test.call.test() {
 entry:
   call void @test.call.other()
   ret void
+  unreachable
 }

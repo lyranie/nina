@@ -7,6 +7,7 @@ import nina::types;
 import nina::lookup;
 import nina::profiler;
 import nina::registry;
+import nina::highlighter;
 
 import std::io;
 import std::os;
@@ -117,8 +118,23 @@ fn void node_free(Node* node, Allocator alloc) {
         if (node.variable_node.value) {
             node_free(node.variable_node.value, alloc);
         }
+    case NodeType.REAL:
+        break;
+    case NodeType.UNARY:
+        node_free(node.unary_node.node, alloc);
+    case NodeType.STRUCT:
+        node_free(node.struct_node.name, alloc);
+
+        foreach (Node* field : node.struct_node.fields) {
+            node_free(field, alloc);
+        }
+    case NodeType.INIT:
+        node_free(node.struct_node.name, alloc);
+
+        foreach (Node* argument : node.init_node.arguments) {
+            node_free(argument, alloc);
+        }
     default:
-        io::eprintfn("Missing node_free call for type %s", node.type);
-        os::exit(1);
+        highlighter::panic("Missing node_free call for type %s", node.type);
     }
 }

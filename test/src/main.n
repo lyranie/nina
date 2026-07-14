@@ -1,31 +1,12 @@
 mod test.main;
 
-use intlist;
-use libc;
-use std.io;
+use other;
 
 int main() {
-    intlist.IntList list = intlist.create(5);
-    intlist.add(&list, 69);
-    intlist.add(&list, 420);
-    intlist.add(&list, 67);
-    intlist.add(&list, 42);
-
-    std.io.printn("Before:");
-    std.io.printn("");
-    libc.printf("%d\n", intlist.get(&list, 0));
-    libc.printf("%d\n", intlist.get(&list, 1));
-    libc.printf("%d\n", intlist.get(&list, 2));
-    libc.printf("%d\n", intlist.get(&list, 3));
-
-    intlist.remove(&list, 2);
-
-    std.io.printn("After:");
-    std.io.printn("");
-    libc.printf("%d\n", intlist.get(&list, 0));
-    libc.printf("%d\n", intlist.get(&list, 1));
-    libc.printf("%d\n", intlist.get(&list, 2));
-    libc.printf("%d\n", intlist.get(&list, 3));
+    Person a = new Person("", 0);
+    other.Person b = new other.Person("", 0);
+    other.Person c = new Person("", 0);
+    Person d = new other.Person("", 0);
 
     ret 0;
 }

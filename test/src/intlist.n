@@ -1,21 +1,26 @@
-mod intlist;
+mod intarray;
 
 use libc;
 use std.io;
+use std.core.allocator.arena;
 
-type IntList(int* entries, int num_entries, int size);
+type IntArray(Arena* arena, int* entries, int num_entries, int size);
 
-IntList create(int default_size) {
-    int* entries = libc.malloc(4 * default_size);
+IntArray create(Arena* arena, int default_size) {
+    int* entries = arena.alloc(arena, 4 * default_size, 4);
     libc.memset(entries, 0, 4 * default_size);
 
-    ret new IntList(entries, 0, default_size);
+    ret new IntArray(arena, entries, 0, default_size);
 }
 
-void add(IntList* list, int i) {
-    if (i + 1 >= list.num_entries) {
-        list.size    = list.size * 2;
-        list.entries = libc.realloc(list.entries, 4 * list.size);
+void add(IntArray* list, int i) {
+    if (list.num_entries + 1 >= list.size) {
+        int  new_size    = list.size * 2;
+        int* new_entries = arena.alloc(list.arena, 4 * new_size, 4);
+
+        libc.memcpy(new_entries, list.entries, 4 * list.num_entries);
+        list.entries = new_entries;
+        list.size = new_size;
     }
 
     int* dst = list.entries + list.num_entries;
@@ -24,18 +29,16 @@ void add(IntList* list, int i) {
     list.num_entries++;
 }
 
-int get(IntList* list, int i) {
-    if (i >= list.size) {
-        std.io.printn("balls");
+int get(IntArray* list, int i) {
+    if (i >= list.num_entries) {
         ret 0;
     }
 
     ret *(list.entries + i);
 }
 
-bool remove(IntList* list, int i) {
+bool remove(IntArray* list, int i) {
     if (i >= list.num_entries) {
-        std.io.printn("balls");
         ret false;
     }
 

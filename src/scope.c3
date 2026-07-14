@@ -4,6 +4,8 @@ import llvm;
 
 import nina::types;
 
+import std::collections::list;
+
 fn Scope* create(Allocator alloc, Scope* parent = null) {
     Scope* scope = alloc::new(alloc, Scope);
 
@@ -11,6 +13,7 @@ fn Scope* create(Allocator alloc, Scope* parent = null) {
     scope.functions.init(alloc);
     scope.variables.init(alloc);
     scope.types.init(alloc);
+    scope.imports.init(alloc);
 
     return scope;
 }
@@ -129,6 +132,36 @@ fn TypeInfo* get_type(Scope* scope, String name) {
     return null;
 }
 
+// -- IMPORT --
+fn void add_import(Scope* scope, String name) {
+    scope.imports.push(name);
+}
+
+fn bool has_import(Scope* scope, String name) {
+    if (scope.imports.contains(name)) {
+        return true;
+    }
+
+    if (scope.parent) {
+        return has_import(scope.parent, name);
+    }
+
+    return false;
+}
+
+fn List{String} get_imports(Allocator alloc, Scope* scope) {
+    List{String} imports;
+    imports.init(alloc);
+
+    imports.add_all(&&scope.imports);
+
+    if (scope.parent) {
+        imports.add_all(&&get_imports(alloc, scope.parent));
+    }
+
+    return imports;
+}
+
 fn void free(Scope* scope) {
     if (scope == null) {
         return;
@@ -136,4 +169,7 @@ fn void free(Scope* scope) {
     free(scope.parent);
 
     scope.functions.free();
+    scope.variables.free();
+    scope.types.free();
+    scope.imports.free();
 }

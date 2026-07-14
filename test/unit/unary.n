@@ -1,0 +1,23 @@
+mod test.unary;
+
+void test() {
+    int  test  = +1;
+    int  test1 = -1;
+    real test2 = +1.0;
+    real test3 = -1.0;
+}
+
+/*
+define void @test.unary.test() {
+entry:
+  %test = alloca i32, align 4
+  store i32 1, ptr %test, align 4
+  %test1 = alloca i32, align 4
+  store i32 -1, ptr %test1, align 4
+  %test2 = alloca double, align 8
+  store double 1.000000e+00, ptr %test2, align 8
+  %test3 = alloca double, align 8
+  store double -1.000000e+00, ptr %test3, align 8
+  ret void
+  unreachable
+}

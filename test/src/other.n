@@ -2,6 +2,11 @@ mod other;
 
 type Person(char* name, int age);
 
-Person test() {
-    ret new Person("Christoffer Lerno", 69);
+void test () {
+    Person test = new Person("Allie", 23);
+
+    char* name = "Christoffer";
+    int   age  = 53;
+
+    Person test1 = new Person(name, age);
 }

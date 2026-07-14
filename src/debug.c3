@@ -19,14 +19,14 @@ fn void add_function(Generator* generator, CompileContext* context, Node* node, 
     List{LLVMMetadataRef} debug_types;
     debug_types.tinit();
 
-    debug_types.push(lookup::get_llvm_debug_type(context.alloc, generator, context.lookup, node.function_node.type));
+    debug_types.push(lookup::get_llvm_debug_type(context, generator, context.lookup, node.function_node.type));
 
     foreach (Node* parameter : node.function_node.parameters) {
         if (parameter.parameter_node.vaarg) {
             continue;
         }
 
-        debug_types.push(lookup::get_llvm_debug_type(context.alloc, generator, context.lookup, parameter));
+        debug_types.push(lookup::get_llvm_debug_type(context, generator, context.lookup, parameter));
     }
 
     LLVMMetadataRef llvm_subroutine_type = llvm::di_builder_create_subroutine_type(
@@ -66,7 +66,7 @@ fn LLVMValueRef add_parameter(Generator* generator, CompileContext* context, Nod
 
     String          parameter_name  = parameter.parameter_node.name.ident_node.name;
     LLVMMetadataRef llvm_subprogram = llvm::get_subprogram(llvm_function_value);
-    LLVMMetadataRef llvm_debug_type = lookup::get_llvm_debug_type(context.alloc, generator, context.lookup, parameter);
+    LLVMMetadataRef llvm_debug_type = lookup::get_llvm_debug_type(context, generator, context.lookup, parameter);
     LLVMTypeRef     llvm_type       = lookup::get_llvm_type(context, parameter, generator.scope);
     CUInt           line            = (CUInt)parameter.range.from.line;
 

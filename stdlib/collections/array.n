@@ -1,0 +1,63 @@
+mod std.collections.array;
+/*
+use libc;
+use std.core.allocator;
+
+type Array<T>(Allocator alloc, T* entries, int num_entries, int capacity);
+
+Array<T> create<T>(Allocator alloc) {
+    T* entries = allocator.alloc(alloc, T.$size * 8, T.$align);
+
+    ret new Array<T>(alloc, entries, 0, 8);
+}
+
+void add<T>(Array<T>* array, T value) {
+    if (array.num_entries + 1 >= array.capacity) {
+        grow(array);
+    }
+
+    T* offset = array.entries + array.num_entries;
+
+    *(offset) = value;
+    array.num_entries++;
+}
+
+T get<T>(Array<T>* array, int index) {
+    if (index >= array.num_entries) {
+        throw;
+    }
+
+    ret *(array.entries + index);
+}
+
+bool remove<T>(Array<T>* array, int index) {
+    if (index >= array.num_entries) {
+        ret false;
+    }
+
+    T*  dst   = array.entries + index;
+    T*  src   = dst + 1;
+    int count = array.num_entries - index - 1;
+
+    // replace later to remove dependency on libc
+    libc.memcpy(dst, src, T.$size * count);
+
+    T* last  = array.entries + array.num_entries - 1;
+    libc.memset(last, 0, T.$size);
+
+    array.num_entries--;
+
+    ret true;
+}
+
+void grow<T>(Array<T>* array) {
+    int  new_capacity = array.capacity * 2;
+    T* new_entries  = allocator.alloc(array.alloc, T.$size * new_capacity, T.$align);
+
+    // replace later to remove dependency on libc
+    libc.memcpy(new_entries, array.entries, T.$size * array.num_entries);
+    allocator.free(array.alloc, array.entries);
+
+    array.entries  = new_entries;
+    array.capacity = new_capacity;
+}

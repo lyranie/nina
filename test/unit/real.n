@@ -1,0 +1,14 @@
+mod test.real;
+
+void test() {
+    real test = 0.0;
+}
+
+/*
+define void @test.real.test() {
+entry:
+  %test = alloca double, align 8
+  store double 0.000000e+00, ptr %test, align 8
+  ret void
+  unreachable
+}

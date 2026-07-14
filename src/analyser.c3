@@ -53,6 +53,8 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
     case NodeType.DEREFERENCE: analyse_dereference(analyser, context, node);
     case NodeType.SUFFIX:      analyse_suffix(analyser, context, node);
     case NodeType.ASSIGN:      analyse_assign(analyser, context, node);
+    case NodeType.WHILE:       analyse_while(analyser, context, node, data);
+    case NodeType.REAL:        break;
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -126,22 +128,18 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
 }
 
 fn void analyse_type(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
-    String name = node.type_node.name.path_node.path;
-
-    if (name.contains(".")) {
-        long   i           = name.rindex_of(".")!!;
-        String module_name = name[:i];
-
-        if (!analyser.imports.contains(module_name)) {
-            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", module_name);
-        }
-    }
-
-    // check if type is path from other module; if yes, check if module imported
-
+    String    name      = node.type_node.name.path_node.path;
     TypeInfo* type_info = lookup::get_type_info(context, name);
 
     if (!type_info) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find type '%s'", name);
+    }
+
+    String qualified_name = type_info.mod == ""
+        ? type_info.name
+        : string::tformat("%s.%s", type_info.mod, type_info.name);
+
+    if (!type_info && qualified_name.contains(".") && !scope::get_imports(context.alloc, analyser.scope).contains(type_info.mod)) {
         highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find type '%s'", name);
     }
 }
@@ -204,8 +202,6 @@ fn void analyse_call(Analyser* analyser, CompileContext* context, Node* node) {
 }
 
 fn void analyse_bin(Analyser* analyser, CompileContext* context, Node* node, void* data) {
-    @todo("check if operator is applicable to type");
-
     analyse_node(analyser, context, node.bin_node.left, data);
     analyse_node(analyser, context, node.bin_node.right, data);
 
@@ -220,6 +216,31 @@ fn void analyse_bin(Analyser* analyser, CompileContext* context, Node* node, voi
         String right_type = lookup::get_type_name(context, node.bin_node.right, analyser.scope);
 
         highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot operate type '%s' with type '%s'", left_type, right_type);
+    }
+
+    String group = lookup::get_base_type_group(context, node.bin_node.left, analyser.scope);
+    String type  = lookup::get_type_name(context, node.bin_node.left, analyser.scope);
+
+    switch (node.bin_node.operator.type) {
+    case TokenType.PLUS:
+    case TokenType.MINUS:
+        if (group != "integer" && group != "pointer" && group != "real") {
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot use oprtator '%s' with type '%s'", node.bin_node.operator.value, type);
+        }
+    case TokenType.ASTERISK:
+    case TokenType.SLASH:
+    case TokenType.GTE:
+    case TokenType.LTE:
+    case TokenType.LANGLE:
+    case TokenType.RANGLE:
+        if (group != "integer" && group != "real") {
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot use oprtator '%s' with type '%s'", node.bin_node.operator.value, type);
+        }
+    case TokenType.IS_EQUAL:
+    case TokenType.NOT_EQUAL:
+        break; // no need to check; only here to signal it's handled
+    default:
+        break;
     }
 }
 
@@ -248,14 +269,14 @@ fn void analyse_variable(Analyser* analyser, CompileContext* context, Node* node
     if (node.variable_node.value) {
         analyse_node(analyser, context, node.variable_node.value);
 
+        // get actual type infos and compare qualified names
+
         if (!lookup::compare_type(context, node, node.variable_node.value, analyser.scope)) {
             String variable_type = lookup::get_type_name(context, node, analyser.scope);
             String value_type    = lookup::get_type_name(context, node.variable_node.value, analyser.scope);
 
             highlighter::error(context, context.current_file, node.variable_node.value.range.from, node.variable_node.value.range.to, "Expected type '%s', got '%s'", variable_type, value_type);
         }
-
-        @todo("check if value type matches variable type");
     }
 }
 
@@ -298,49 +319,65 @@ fn void analyse_use(Analyser* analyser, CompileContext* context, Node* node) {
     }
 
     analyser.imports.push(path);
+    scope::add_import(analyser.scope, path);
 }
 
 fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) {
     Node*  path = node.access_node.name;
     String name = path.path_node.path;
 
-    if (scope::has_variable(analyser.scope, name)) {
+    bool module_found = false;
+
+    foreach (String mod : analyser.imports) {
+        if (mod == name ||
+            mod.starts_with(string::tformat("%s.", name)) ||
+            mod.ends_with(string::tformat(".%s", name))) {
+            module_found = true;
+            break;
+        }
+    }
+
+    if (module_found) {
+        traverse_access_module(analyser, context, node);
+    } else if (scope::has_variable(analyser.scope, name)) {
         traverse_access_variable(analyser, context, node);
     } else {
-        bool module_found = false;
-
-        foreach (String mod : analyser.imports) {
-            if (mod == name || mod.starts_with(string::tformat("%s.", name))) {
-                module_found = true;
-                break;
-            }
-        }
-
-        if (module_found) {
-            traverse_access_module(analyser, context, node);
-        } else {
-            highlighter::error(context, context.current_file, path.range.from, path.range.to, "Could not find '%s'", name);
-        }
+        highlighter::error(context, context.current_file, path.range.from, path.range.to, "Could not find '%s'", name);
     }
 }
 
 fn void analyse_unary(Analyser* analyser, CompileContext* context, Node* node) {
-    @todo("check if operator is applickable to expr");
+    String group = lookup::get_base_type_group(context, node, analyser.scope);
+    String type  = lookup::get_type_name(context, node, analyser.scope);
+
+    switch (group) {
+    case "integer":
+    case "real":
+        break;
+    default:
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot use operator '%s' on type '%s'", node.unary_node.operator.value, type);
+    }
 }
 
 fn void analyse_if(Analyser* analyser, CompileContext* context, Node* node, void* data) {
-    @todo("check if condition type is passable");
-
     analyse_node(analyser, context, node.if_node.condition);
 
-    foreach (Node* statement : node.if_node.then_statements) {
-        analyse_node(analyser, context, statement, data);
+    switch (lookup::get_base_type_group(context, node.if_node.condition, analyser.scope)) {
+    case "pointer":
+    case "boolean":
+        break;
+    default:
+        highlighter::error(context, context.current_file, node.if_node.condition.range.from, node.if_node.condition.range.to, "Expression must be a pointer or a bool");
     }
 
-    foreach (Node* statement : node.if_node.else_statements) {
-        analyse_node(analyser, context, statement, data);
-    }
-
+    analyser.scope = scope::create(context.alloc, analyser.scope);
+    analyse_compound(analyser, context, node.if_node.then_statements, data);
+    analyser.scope = analyser.scope.parent;
+    
+    analyser.scope = scope::create(context.alloc, analyser.scope);
+    analyse_compound(analyser, context, node.if_node.else_statements, data);
+    analyser.scope = analyser.scope.parent;
+    
     if (node.if_node.else_if) {
         analyse_node(analyser, context, node.if_node.else_if, data);
     }
@@ -463,6 +500,14 @@ fn void analyse_assign(Analyser* analyser, CompileContext* context, Node* node) 
     }
 }
 
+fn void analyse_while(Analyser* analyser, CompileContext* context, Node* node, void* data) {
+    analyse_node(analyser, context, node.while_node.expr);
+
+    analyser.scope = scope::create(context.alloc, analyser.scope);
+    analyse_compound(analyser, context, node.while_node.statements, data);
+    analyser.scope = analyser.scope.parent;
+}
+
 fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
     String name = node.access_node.name.path_node.path;
     
@@ -489,10 +534,28 @@ fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node
         }
     }
 
-    String module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
-    if (!analyser.imports.contains(module_name)) {
-        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", module_name);
+    String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+
+    String resolved_module;
+    bool   found = false;
+
+    foreach (String mod : analyser.imports) {
+        if (mod == short_module_name || mod.ends_with(string::tformat(".%s", short_module_name))) {
+            resolved_module = mod;
+            found = true;
+            break;
+        }
     }
+
+    if (!found) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", short_module_name);
+    }
+
+    DString resolved_full_name;
+    resolved_full_name.tinit();
+    resolved_full_name.append(resolved_module);
+    resolved_full_name.append(".");
+    resolved_full_name.append(function_name);
 
     next = node;
     while (next) {
@@ -500,9 +563,7 @@ fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node
         case NodeType.ACCESS:
             next = next.access_node.next;
         case NodeType.CALL:
-            handle_call(analyser, context, next, full_name.str_view(), module_name, lookup::get_function_info(context, full_name.str_view()));
-
-            @todo("move above block to separate function");
+            handle_call(analyser, context, next, resolved_full_name.str_view(), resolved_module, lookup::get_function_info(context, resolved_full_name.str_view()));
 
             next = null;
         default:
@@ -510,8 +571,8 @@ fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node
         }
     }
 
-    if (!context.registry.functions.has_key(full_name.str_view())) {
-        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", function_name, module_name);
+    if (!context.registry.functions.has_key(resolved_full_name.str_view())) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", function_name, resolved_module);
     }
 }
 

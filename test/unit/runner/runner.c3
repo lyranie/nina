@@ -6,33 +6,13 @@ import std::os::process;
 import std::collections::map;
 
 extern fn CompileContext* nina_context_create();
-extern fn void nina_context_free(CompileContext* context);
+extern fn CompileContext* nina_context_free(CompileContext* context);
 
-extern fn Lexer* nina_lexer_create(CompileContext* context, CChar* path);
-extern fn void nina_lexer_tokenize(CompileContext *context, Lexer* lexer);
-extern fn void nina_lexer_free(CompileContext* context, Lexer* lexer);
-
-extern fn Parser* nina_parser_create(CompileContext* context, Lexer* lexer);
-extern fn void nina_parser_parse(CompileContext* context, Parser* parser, Lexer* lexer);
-extern fn void nina_parser_free(CompileContext* context, Parser* parser);
-
-extern fn void nina_registry_register(CompileContext* context, Parser* parser);
-
-extern fn Analyser* nina_analyser_create(CompileContext* context, CChar* path);
-extern fn void nina_analyser_analyse(CompileContext* context, Analyser* analyser, Parser* parser);
-extern fn void nina_analyser_free(CompileContext* context, Analyser* analyser);
-
-extern fn Generator* nina_generator_create(CompileContext* context, Parser* parser);
-extern fn void nina_generator_generate(CompileContext *context, Generator* generator, Parser* parser);
-extern fn void nina_generator_free(CompileContext *context, Generator* generator);
+extern fn void nina_compile_single_file(CompileContext* context, CChar* file);
 
 alias Summary = HashMap{String, bool};
 
 fn void main() {
-    path::mkdir("out")!!;
-    path::mkdir("out/ir")!!;
-    path::mkdir("out/obj")!!;
-
     CompileContext* context = nina_context_create();
     context.args.emit_ir  = true;
     context.args.no_debug = true;
@@ -61,28 +41,11 @@ fn void main() {
 fn bool run_test(CompileContext* context, String name) {
     String test_file = string::format(context.alloc, "test/unit/%s.n", name);
 
-    Lexer* lexer = nina_lexer_create(context, (CChar*)test_file.ptr);
-    nina_lexer_tokenize(context, lexer);
+    nina_compile_single_file(context, (CChar*)test_file.ptr);
 
-    Parser* parser = nina_parser_create(context, lexer);
-    nina_parser_parse(context, parser, lexer);
-
-    nina_registry_register(context, parser);
-
-    Analyser* analyser = nina_analyser_create(context, (CChar*)test_file.ptr);
-    nina_analyser_analyse(context, analyser, parser);
-
-    Generator* generator = nina_generator_create(context, parser);
-    nina_generator_generate(context, generator, parser);
-
-    String module_name = generator.module_name;
+    String module_name = context.current_module;
     String ir_file     = string::format(context.alloc, "out/ir/%s.ll", module_name);
     String obj_file    = string::format(context.alloc, "out/obj/%s.o", module_name);
-
-    nina_lexer_free(context, lexer);
-    nina_parser_free(context, parser);
-    nina_analyser_free(context, analyser);
-    nina_generator_free(context, generator);
 
     if (catch path::delete(obj_file.to_path(context.alloc))) {
         io::eprintfn("Failed to delete file '%s'", obj_file);

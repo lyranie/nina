@@ -1,0 +1,44 @@
+mod std.core.allocator.arena;
+
+use libc;
+
+type Arena(char* buffer, int capacity, int offset);
+
+Arena create(int capacity) {
+    char* backing = libc.malloc(capacity);
+    ret new Arena(backing, capacity, 0);
+}
+
+int align_up(int n, int align) {
+    int multiple = 0;
+
+    while (multiple < n) {
+        multiple = multiple + align;
+    }
+
+    ret multiple;
+}
+
+void* alloc(Arena* a, int size, int align) {
+    int aligned_offset = align_up(a.offset, align);
+
+    if (aligned_offset + size > a.capacity) {
+        ret null;
+    }
+
+    a.offset = aligned_offset + size;
+    ret a.buffer + aligned_offset;
+}
+
+void reset(Arena* a) {
+    a.offset = 0;
+}
+
+void free(Arena* a) {
+    int i = 0;
+
+    while (i < a.capacity) {
+        *(a.buffer + i) = 0;
+        i++;
+    }
+}

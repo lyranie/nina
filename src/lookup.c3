@@ -19,6 +19,7 @@ fn Lookup* create(Allocator alloc) {
     register_type(lookup, alloc, "bool",   "<builtin>", null, llvm::int_1_type());
     register_type(lookup, alloc, "char",   "<builtin>", null, llvm::int_8_type());
     register_type(lookup, alloc, "long",   "<builtin>", null, llvm::int_64_type());
+    register_type(lookup, alloc, "real",   "<builtin>", null, llvm::double_type());
     register_type(lookup, alloc, "void",   "<builtin>", null, llvm::void_type());
     register_type(lookup, alloc, "String", "<builtin>", null, llvm::slice_type(llvm::int_8_type()));
 
@@ -154,14 +155,15 @@ fn LLVMTypeRef get_pointee_llvm_type(CompileContext* context, Node* node, Scope*
     return get_llvm_type(context, &cloned, scope);
 }
 
-fn LLVMMetadataRef get_llvm_debug_type(Allocator alloc, Generator* generator, Lookup* lookup, Node* node) => @pool() {
+fn LLVMMetadataRef get_llvm_debug_type(CompileContext* context, Generator* generator, Lookup* lookup, Node* node) => @pool() {
     switch (node.type) {
     case NodeType.TYPE:
         String type_name   = node.type_node.name.ident_node.name;
         String type_suffix = node.type_node.suffix;
 
-        LLVMTypeRef     llvm_type       = lookup.get(type_name).llvm_type!!;
-        LLVMMetadataRef llvm_debug_type = get_llvm_debug_type_from_kind(alloc, generator, llvm_type);
+        TypeInfo*       type_info       = get_type_info(context, type_name);
+        LLVMTypeRef     llvm_type       = type_info.llvm_type; // lookup.get(type_name).llvm_type!!;
+        LLVMMetadataRef llvm_debug_type = get_llvm_debug_type_from_kind(context, generator, llvm_type, type_info);
 
         while (type_suffix.ends_with("*") || type_suffix.ends_with("[]")) {
             switch (type_suffix[type_suffix.len - 1]) {
@@ -178,26 +180,55 @@ fn LLVMMetadataRef get_llvm_debug_type(Allocator alloc, Generator* generator, Lo
 
         return llvm_debug_type;
     case NodeType.PARAMETER:
-        return get_llvm_debug_type(alloc, generator, lookup, node.parameter_node.type);
+        return get_llvm_debug_type(context, generator, lookup, node.parameter_node.type);
     default:
         highlighter::panic("Missing get_llvm_debug_type case for type '%s'", node.type);
     }
 }
 
-fn LLVMMetadataRef get_llvm_debug_type_from_kind(Allocator alloc, Generator* generator, LLVMTypeRef llvm_type) {
+fn LLVMMetadataRef get_llvm_debug_type_from_kind(CompileContext* context, Generator* generator, LLVMTypeRef llvm_type, TypeInfo* type_info) {
     switch (llvm::get_type_kind(llvm_type)) {
     case LLVMTypeKind.VOID_TYPE_KIND:
         return null;
     case LLVMTypeKind.INTEGER_TYPE_KIND:
         CUInt  width = llvm::get_int_type_width(llvm_type);
-        String name  = string::format(alloc, "i%d", width);
+        String name  = string::format(context.alloc, "i%d", width);
 
         if (width == 1) {
-            name.free(alloc);
+            name.free(context.alloc);
             name = "bool";
         }
 
         return llvm::di_builder_create_basic_type(generator.llvm_debug_builder, (CChar*)name.ptr, (CUInt)name.len, width, 5, LLVMDIFlags.DI_FLAG_ZERO);
+    case LLVMTypeKind.STRUCT_TYPE_KIND:
+        String name = ((ZString)llvm::get_struct_name(llvm_type)).str_view().copy(context.alloc);
+
+        uint size_in_bits = 0;
+        uint align_in_bits = 0;
+
+        List{LLVMMetadataRef} member_types;
+        member_types.init(context.alloc);
+
+        @todo("finish implementing struct members and size + align");
+
+        return llvm::di_builder_create_struct_type(
+            generator.llvm_debug_builder,
+            generator.llvm_debug_file,
+            (CChar*)name.ptr,
+            name.len,
+            generator.llvm_debug_file,
+            (CUInt)type_info.node.range.from.line,
+            size_in_bits,
+            align_in_bits,
+            LLVMDIFlags.DI_FLAG_ZERO,
+            null,
+            member_types.to_array(context.alloc),
+            (CUInt)member_types.len(),
+            0,
+            null,
+            (CChar*)"".ptr,
+            0
+        );
     default:
         highlighter::panic("Missing get_llvm_debug_type_from_kind case for type kind '%s'", llvm::get_type_kind(llvm_type));
     }
@@ -210,11 +241,18 @@ fn bool compare_type(CompileContext* context, Node* node, Node* other, Scope* sc
     String node_base_group  = get_base_type_group(context, node, scope);
     String other_base_group = get_base_type_group(context, other, scope);
 
+    TypeInfo* node_type_info  = get_type_info(context, node_type);
+    TypeInfo* other_type_info = get_type_info(context, other_type);
+
     if (node_base_group == other_base_group) {
         return true;
     }
 
     if (node_type == other_type) {
+        return true;
+    }
+
+    if (node_type_info && node_type_info == other_type_info) {
         return true;
     }
 
@@ -276,10 +314,21 @@ fn String get_type_name(CompileContext* context, Node* node, Scope* scope) {
         Node*  path = node.access_node.name;
         String name = path.path_node.path;
 
-        if (scope::has_variable(scope, name)) {
-            return traverse_access_variable(context, node, scope);
-        } else {
+        bool module_found = false;
+
+        foreach (String mod : scope::get_imports(context.alloc, scope)) {
+            if (mod == name ||
+                mod.starts_with(string::tformat("%s.", name)) ||
+                mod.ends_with(string::tformat(".%s", name))) {
+                module_found = true;
+                break;
+            }
+        }
+
+        if (module_found) {
             return traverse_access_module(context, node, scope);
+        } else {
+            return traverse_access_variable(context, node, scope);
         }
     case NodeType.INIT:
         return node.init_node.name.path_node.path;
@@ -297,6 +346,8 @@ fn String get_type_name(CompileContext* context, Node* node, Scope* scope) {
         String type_name = get_type_name(context, node.dereference_node.node, scope);
 
         return type_name[:type_name.len - 1];
+    case NodeType.REAL:
+        return "real";
     default:
         highlighter::panic("Missing get_type_name case for type '%s'", node.type);
     }
@@ -328,6 +379,8 @@ fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope)
             return "pointer";
         case LLVMTypeKind.STRUCT_TYPE_KIND:
             return "struct";
+        case LLVMTypeKind.DOUBLE_TYPE_KIND:
+            return "real";
         default:
             highlighter::panic("Missing get_base_type_group#TYPE case for type kind '%s'", llvm_type_kind);
         }
@@ -374,10 +427,21 @@ fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope)
         Node*  path = node.access_node.name;
         String name = path.path_node.path;
 
-        if (scope::has_variable(scope, name)) {
-            return traverse_access_variable_base_group(context, node, scope);
-        } else {
+        bool module_found = false;
+
+        foreach (String mod : scope::get_imports(context.alloc, scope)) {
+            if (mod == name ||
+                mod.starts_with(string::tformat("%s.", name)) ||
+                mod.ends_with(string::tformat(".%s", name))) {
+                module_found = true;
+                break;
+            }
+        }
+
+        if (module_found) {
             return traverse_access_module_base_group(context, node, scope);
+        } else {
+            return traverse_access_variable_base_group(context, node, scope);
         }
     case NodeType.INIT:
         return node.init_node.name.path_node.path;
@@ -405,6 +469,8 @@ fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope)
         default:
             highlighter::panic("Missing get_base_type_group#DEREFERENCE case for type kind '%s'", pointee_type_kind);
         }
+    case NodeType.REAL:
+        return "real";
     default:
         highlighter::panic("Missing get_base_type_group case for type '%s'", node.type);
     }
@@ -461,8 +527,6 @@ fn String traverse_access_field(CompileContext* context, Node* node, Scope* scop
 }
 
 fn String traverse_access_module(CompileContext* context, Node* node, Scope* scope) => @pool() {
-    String name = node.access_node.name.path_node.path;
-    
     DString full_name;
     full_name.tinit();
 
@@ -486,7 +550,30 @@ fn String traverse_access_module(CompileContext* context, Node* node, Scope* sco
         }
     }
 
-    String module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+    String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+
+    String resolved_module;
+    bool   found = false;
+
+    for (Scope* s = scope; s && !found; s = s.parent) {
+        foreach (String mod : s.imports) {
+            if (mod == short_module_name || mod.ends_with(string::tformat(".%s", short_module_name))) {
+                resolved_module = mod;
+                found = true;
+                break;
+            }
+        }
+    }
+
+    if (!found) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", short_module_name);
+    }
+
+    DString resolved_full_name;
+    resolved_full_name.tinit();
+    resolved_full_name.append(resolved_module);
+    resolved_full_name.append(".");
+    resolved_full_name.append(function_name);
 
     next = node;
     while (next) {
@@ -494,7 +581,7 @@ fn String traverse_access_module(CompileContext* context, Node* node, Scope* sco
         case NodeType.ACCESS:
             next = next.access_node.next;
         case NodeType.CALL:
-            FunctionInfo* function_info = get_function_info(context, full_name.str_view());
+            FunctionInfo* function_info = get_function_info(context, resolved_full_name.str_view());
             Node*         type_node;
 
             switch (function_info.node.type) {
@@ -508,12 +595,12 @@ fn String traverse_access_module(CompileContext* context, Node* node, Scope* sco
 
             String type_name = get_type_name(context, type_node, scope);
 
-            return type_name.contains(".") ? type_name : string::format(context.alloc, "%s.%s", module_name, type_name);
+            return type_name.contains(".") ? type_name : string::format(context.alloc, "%s.%s", resolved_module, type_name);
         default:
             highlighter::panic();
         }
     }
-    
+
     highlighter::panic();
 }
 
@@ -559,8 +646,6 @@ fn String traverse_access_field_base_group(CompileContext* context, Node* node, 
 }
 
 fn String traverse_access_module_base_group(CompileContext* context, Node* node, Scope* scope) => @pool() {
-    String name = node.access_node.name.path_node.path;
-    
     DString full_name;
     full_name.tinit();
 
@@ -584,7 +669,30 @@ fn String traverse_access_module_base_group(CompileContext* context, Node* node,
         }
     }
 
-    String module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+    String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+
+    String resolved_module;
+    bool   found = false;
+
+    for (Scope* s = scope; s && !found; s = s.parent) {
+        foreach (String mod : s.imports) {
+            if (mod == short_module_name || mod.ends_with(string::tformat(".%s", short_module_name))) {
+                resolved_module = mod;
+                found = true;
+                break;
+            }
+        }
+    }
+
+    if (!found) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", short_module_name);
+    }
+
+    DString resolved_full_name;
+    resolved_full_name.tinit();
+    resolved_full_name.append(resolved_module);
+    resolved_full_name.append(".");
+    resolved_full_name.append(function_name);
 
     next = node;
     while (next) {
@@ -592,7 +700,7 @@ fn String traverse_access_module_base_group(CompileContext* context, Node* node,
         case NodeType.ACCESS:
             next = next.access_node.next;
         case NodeType.CALL:
-            FunctionInfo* function_info = get_function_info(context, full_name.str_view());
+            FunctionInfo* function_info = get_function_info(context, resolved_full_name.str_view());
             Node*         type_node;
 
             switch (function_info.node.type) {
@@ -609,15 +717,16 @@ fn String traverse_access_module_base_group(CompileContext* context, Node* node,
             highlighter::panic();
         }
     }
-    
+
     highlighter::panic();
 }
 
 fn TypeInfo* get_type_info(CompileContext* context, String name) {
     if (context.lookup.has_key(name)) {
-        Type* type = context.lookup.get(name)!!;
+        Type*     type      = context.lookup.get(name)!!;
         TypeInfo* type_info = alloc::new(context.alloc, TypeInfo);
 
+        type_info.name      = name;
         type_info.node      = type.node;
         type_info.llvm_type = type.llvm_type;
 
@@ -628,7 +737,16 @@ fn TypeInfo* get_type_info(CompileContext* context, String name) {
         ? name
         : string::tformat("%s.%s", context.current_module, name);
 
-    return context.registry.types.get(qualified_name)!!;
+    TypeInfo* type_info;
+    foreach (String type_name : context.registry.types.tkeys()) {
+        if (type_name == name ||
+            type_name.ends_with(string::tformat(".%s", name))) {
+            type_info = context.registry.types.get(type_name)!!;
+            break;
+        }
+    }
+
+    return type_info;
 }
 
 fn FunctionInfo* get_function_info(CompileContext* context, String name) {
@@ -636,5 +754,5 @@ fn FunctionInfo* get_function_info(CompileContext* context, String name) {
         ? name
         : string::tformat("%s.%s", context.current_module, name);
 
-    return context.registry.functions.get(qualified_name)!!;
+    return context.registry.functions.get(qualified_name) ?? null;
 }

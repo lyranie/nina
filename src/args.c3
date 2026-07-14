@@ -59,6 +59,9 @@ fn void parse(Args* args, String[] argv) {
             args.no_debug = true;
         case "--no-link":
             args.no_linker = true;
+        case "--help":
+        case "-h":
+            print_help(argv[0]);
         }
     }
 }
@@ -71,6 +74,7 @@ fn void print_help(String program) @noreturn @private {
     io::printfn("  compile-run <files>          Compiles the given files and runs the resulting binary.");
     io::printfn("");
     io::printfn("Options:");
+    io::printfn("  --help, -h                   Displays a page with all commands and options.");
     io::printfn("  --ir                         Emits the generated IR files for the selected backend.");
     io::printfn("  --no-libc                    Doesn't link against libc and the crt.");
     io::printfn("  --output, -o <file>          Specifies the output filename.");

@@ -25,4 +25,5 @@ entry:
   %test5 = alloca i32, align 4
   store i32 6, ptr %test5, align 4
   ret void
+  unreachable
 }

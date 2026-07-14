@@ -10,8 +10,8 @@ import std::thread;
 fn void main(String[] argv)
 {
     @todo("mark type narrowing as error without explicit cast");
-    @todo("make slices provide the pointer for function calls that require a char*");
-    @todo("make lookup::get_type_info() that grabs it from registry with its qualified name");
+    @todo("add reflection");
+    @todo("add type widening");
 
     CompileContext* context = core::context_create();
 
@@ -24,18 +24,20 @@ fn void main(String[] argv)
     profiler::commit(context.profiler, "Args");
     args::parse(context.args, argv);
 
-    @todo("check actual command provided via args");
+    switch (context.args.cmd) {
+    case CompileCommand.COMPILE:
+        compile(context);
+    default:
+        highlighter::panic();
+    }
 
-    // add stdlib
-    path::traverse("stdlib".to_path(context.alloc), fn bool?(path, is_dir, data) {
-        CompileContext* context = (CompileContext*)data;
+    profiler::end(context.profiler);
 
-        if (!is_dir && path.has_extension("n")) {
-            context.args.files.push(path.copy(context.alloc));
-        }
+    core::context_free(context);
+}
 
-        return false;
-    }, context)!!;
+fn void compile(CompileContext* context) {
+    add_stdlib(context);
 
     foreach (String file : context.args.files) {
         String? path = file.to_tpath().absolute(context.alloc).copy(context.alloc);
@@ -44,33 +46,38 @@ fn void main(String[] argv)
             os::exit(1);
         }
 
-        // -- LEXER --
         profiler::commit(context.profiler, "Lexer");
-        
         Lexer* lexer = lexer::create(context, path);
         lexer::tokenize(lexer, context);
 
-        // -- PARSER --
         profiler::commit(context.profiler, "Parser");
-
         Parser* parser = parser::create(context.alloc, lexer);
         parser::parse(parser, context, lexer);
-
-        registry::register(context, parser);
 
         lexer::free(lexer, context.alloc);
     }
 
     foreach (String file : context.args.files) {
         String path = file.to_tpath().absolute(context.alloc).copy(context.alloc)!!;
+        context.current_file = path;
 
-        // -- ANALYSER --
+        registry::register_types(context, context.trees.get(context.current_file))!!;
+    }
+
+    foreach (String file : context.args.files) {
+        String path = file.to_tpath().absolute(context.alloc).copy(context.alloc)!!;
+        context.current_file = path;
+
+        registry::register_functions(context, context.trees.get(context.current_file))!!;
+    }
+
+    foreach (String file : context.args.files) {
+        String path = file.to_tpath().absolute(context.alloc).copy(context.alloc)!!;
+
         profiler::commit(context.profiler, "Analyser");
-
         Analyser* analyser = analyser::create(context, path);
         analyser::analyse(analyser, context);
 
-        // -- GENERATOR --
         profiler::commit(context.profiler, "Generator");
         Generator* generator = generator::create(context);
         generator::generate(generator, context);
@@ -81,7 +88,6 @@ fn void main(String[] argv)
         // parser::free(parser, context.alloc);
         analyser::free(analyser, context.alloc);
         generator::free(generator, context);
-
     }
 
     profiler::commit(context.profiler, "Linker");
@@ -93,9 +99,16 @@ fn void main(String[] argv)
     }
 
     profiler::commit(context.profiler, "Cleanup");
+}
 
-    // TODO: move? cleanup still happens in context_free
-    profiler::end(context.profiler);
+fn void add_stdlib(CompileContext* context) {
+    path::traverse("stdlib".to_path(context.alloc), fn bool?(path, is_dir, data) {
+        CompileContext* context = (CompileContext*)data;
 
-    core::context_free(context);
+        if (!is_dir && path.has_extension("n")) {
+            context.args.files.push(path.copy(context.alloc));
+        }
+
+        return false;
+    }, context)!!;
 }

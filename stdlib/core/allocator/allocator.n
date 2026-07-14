@@ -1,0 +1,15 @@
+mod std.core.allocator;
+
+/*
+base Allocator {
+    void* alloc(Allocator* alloc, int size, int align);
+    void  free(Allocator* alloc, void* ptr);
+}
+
+void* alloc(Allocator* alloc, int size, int align) {
+    ret alloc.$vtable.alloc(alloc.$data, size, align);
+}
+
+void free(Allocator* alloc, void* ptr) {
+    ret alloc.$vtable.free(alloc.$data, ptr);
+}

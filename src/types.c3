@@ -94,6 +94,8 @@ enum TokenType {
     KW_ELSE,
     KW_TYPE,
     KW_NEW,
+    KW_WHILE,
+    KW_BASE,
 
     SEMI,
     LPAREN,
@@ -120,6 +122,7 @@ enum TokenType {
     LANGLE,
     RANGLE,
     BANG,
+    COLON,
 }
 
 struct Parser {
@@ -220,6 +223,7 @@ struct Node {
         struct struct_node {
             Node*    name;
             NodeList fields;
+            Node*    base;
         }
         struct init_node {
             Node*    name;
@@ -238,6 +242,17 @@ struct Node {
         struct assign_node {
             Node* node;
             Node* expr;
+        }
+        struct while_node {
+            Node*    expr;
+            NodeList statements;
+        }
+        struct base_node {
+            Node*    name;
+            NodeList functions;
+        }
+        struct real_node {
+            String real;
         }
     }
 }
@@ -268,6 +283,15 @@ enum NodeType {
     DEREFERENCE,
     SUFFIX,
     ASSIGN,
+    WHILE,
+    BASE,
+    REAL,
+}
+
+struct FunctionSignature {
+    Node*    type;
+    Node*    name;
+    NodeList parameters;
 }
 
 struct Registry {
@@ -286,6 +310,7 @@ struct Scope {
     HashMap{String, FunctionInfo*} functions;
     HashMap{String, VariableInfo*} variables;
     HashMap{String, TypeInfo*}     types;
+    List{String}                   imports;
 }
 
 struct FunctionInfo {
@@ -304,9 +329,11 @@ struct VariableInfo {
 }
 
 struct TypeInfo {
+    String       name;
     String       mod;
     String       file;
     Node*        node;
+    TypeInfo*    base;
     LLVMTypeRef  llvm_type;
     LLVMValueRef llvm_value;
 }
