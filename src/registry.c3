@@ -64,12 +64,22 @@ fn void _register_functions(CompileContext* context, Node* node) {
         String fn_name  = node.function_node.name.ident_node.name;
         String name     = string::format(context.alloc, "%s.%s", mod_name, fn_name);
 
+        TypeInfo* type_info = lookup::get_type_info(context, node.function_node.type.type_node.name.path_node.path);
+        if (!type_info) {
+            highlighter::error(context, context.current_file, node.function_node.type.range.from, node.function_node.type.range.to, "Could not find type '%s'", node.function_node.type.type_node.name.path_node.path);
+        }
+
         LLVMTypeRef return_type = lookup::get_llvm_type(context, node.function_node.type, null);
     
         List{LLVMTypeRef} parameters;
         parameters.tinit();
 
         foreach (Node* parameter : node.function_node.parameters) {
+            TypeInfo* parameter_type_info = lookup::get_type_info(context, parameter.parameter_node.type.type_node.name.path_node.path);
+            if (!parameter_type_info) {
+                highlighter::error(context, context.current_file, parameter.parameter_node.type.range.from, parameter.parameter_node.type.range.to, "Could not find type '%s'", parameter.parameter_node.type.type_node.name.path_node.path);
+            }
+
             if (!parameter.parameter_node.vaarg && !parameter.parameter_node.type) {
                 highlighter::error(context, context.current_file, parameter.range.from, parameter.range.to, "Unnamed parameters are not allowed");
             }
@@ -100,6 +110,11 @@ fn void _register_functions(CompileContext* context, Node* node) {
         String mod_name = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
         String ext_name = node.ext_node.name.ident_node.name;
         String name     = string::format(context.alloc, "%s.%s", mod_name, ext_name);
+
+        TypeInfo* type_info = lookup::get_type_info(context, node.ext_node.type.type_node.name.path_node.path);
+        if (!type_info) {
+            highlighter::error(context, context.current_file, node.ext_node.type.range.from, node.ext_node.type.range.to, "Could not find type '%s'", node.ext_node.type.type_node.name.path_node.path);
+        }
     
         LLVMTypeRef return_type = lookup::get_llvm_type(context, node.function_node.type, null);
 
@@ -112,6 +127,11 @@ fn void _register_functions(CompileContext* context, Node* node) {
             if (parameter.parameter_node.vaarg) {
                 vaarg = true;
                 continue;
+            }
+
+            TypeInfo* parameter_type_info = lookup::get_type_info(context, parameter.parameter_node.type.type_node.name.path_node.path);
+            if (!parameter_type_info) {
+                highlighter::error(context, context.current_file, parameter.parameter_node.type.range.from, parameter.parameter_node.type.range.to, "Could not find type '%s'", parameter.parameter_node.type.type_node.name.path_node.path);
             }
             
             if (!parameter.parameter_node.vaarg && !parameter.parameter_node.type) {

@@ -378,6 +378,8 @@ fn String get_type_name(CompileContext* context, Node* node, Scope* scope) {
         return type_name[:type_name.len - 1];
     case NodeType.REAL:
         return "real";
+    case NodeType.EXT:
+        return get_type_name(context, node.ext_node.type, scope);
     default:
         highlighter::panic("Missing get_type_name case for type '%s'", node.type);
     }

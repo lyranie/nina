@@ -96,7 +96,7 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
     case NodeType.DEREFERENCE: return generate_dereference(generator, context, node);
     case NodeType.SUFFIX:      return generate_suffix(generator, context, node);
     case NodeType.ASSIGN:             generate_assign(generator, context, node);
-    case NodeType.NULL:               generate_null(generator, context, node);
+    case NodeType.NULL:        return generate_null(generator, context, node);
     case NodeType.WHILE:              generate_while(generator, context, node);
     case NodeType.REAL:        return generate_real(generator, context, node);
     default:

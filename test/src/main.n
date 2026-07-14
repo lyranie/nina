@@ -1,24 +1,45 @@
 mod test.main;
 
-ext void InitWindow( int width, int height,char* name);
-ext void BeginDrawing();
-ext void EndDrawing();
-ext void ClearBackground(Color);
-ext bool WindowShouldClose();
+use libc;
 
-type Color(char r, char g, char b, char a);
+ext int glfwInit();
+ext void glfwTerminate();
+ext void glfwWindowHint(int hint, int value);
+ext GLFWwindow* glfwCreateWindow(int width, int height, char* title, GLFWmonitor* monitor, GLFWwindow* share);
+ext void glfwDestroyWindow(GLFWwindow* window);
+ext int glfwWindowShouldClose(GLFWwindow* window);
+ext void glfwShowWindow(GLFWwindow* window);
+ext void glfwMakeContextCurrent(GLFWwindow* window);
+ext void glfwSwapBuffers(GLFWwindow* window);
+ext void glfwPollEvents();
 
-int main(){
+type GLFWwindow();
+type GLFWmonitor();
 
-    int width = 9;
-    InitWindow(800,600,"foo");
+int main() {
+    int GLFW_TRUE  = 1;
+    int GLFW_FALSE = 0;
 
-    Color col = new Color(255, 0, 0, 255);
-    while (!WindowShouldClose()){
-        BeginDrawing();
-        ClearBackground(col);
-        EndDrawing();
+    int GLFW_VISIBLE = 131076; 
+
+    if (glfwInit() == GLFW_FALSE) {
+        libc.printf("Failed to initialize GLFW\n");
+        ret 1;
     }
+
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     
-    ret 69;
+    GLFWwindow* handle = glfwCreateWindow(1280, 720, "Penis", null, null);
+    glfwShowWindow(handle);
+    glfwMakeContextCurrent(handle);
+
+    while (glfwWindowShouldClose(handle) == GLFW_FALSE) {
+        glfwPollEvents();
+        glfwSwapBuffers(handle);
+    }
+
+    glfwDestroyWindow(handle);
+    glfwTerminate();
+
+    ret 0;
 }
