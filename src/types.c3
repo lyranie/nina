@@ -23,6 +23,7 @@ struct Args {
     bool           no_debug;
     bool           no_linker;
     String         output;
+    StringList     linked_libs;
 }
 
 enum CompileCommand {

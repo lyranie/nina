@@ -62,6 +62,16 @@ fn void parse(Args* args, String[] argv) {
         case "--help":
         case "-h":
             print_help(argv[0]);
+        case "--link":
+        case "-l":
+            if ((long)i + 1 >= argv.len) {
+                print_help(argv[0]);
+            }
+
+            args.linked_libs.push(argv[++i]);
+        default:
+            io::eprintfn("unrecognized option '%s'", argv[i]);
+            print_help(argv[0]);
         }
     }
 }
@@ -75,6 +85,7 @@ fn void print_help(String program) @noreturn @private {
     io::printfn("");
     io::printfn("Options:");
     io::printfn("  --help, -h                   Displays a page with all commands and options.");
+    io::printfn("  --link, -l                   Specifies a library to link with.");
     io::printfn("  --ir                         Emits the generated IR files for the selected backend.");
     io::printfn("  --no-libc                    Doesn't link against libc and the crt.");
     io::printfn("  --output, -o <file>          Specifies the output filename.");

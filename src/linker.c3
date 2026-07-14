@@ -108,6 +108,11 @@ fn String[] build_linux_link_command(Linker* linker, CompileContext* context) =>
         io::printfn("Arch '%s' not supported yet", linker.target_arch);
     }
 
+    foreach (String lib : context.args.linked_libs) {
+        command.push("-l");
+        command.push(lib);
+    }
+
     command.push("-o");
     command.push(linker.output);
 
