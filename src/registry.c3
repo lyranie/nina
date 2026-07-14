@@ -4,6 +4,7 @@ import llvm;
 
 import nina::types;
 import nina::lookup;
+import nina::highlighter;
 
 import std::io;
 import std::collections::list;
@@ -69,6 +70,10 @@ fn void _register_functions(CompileContext* context, Node* node) {
         parameters.tinit();
 
         foreach (Node* parameter : node.function_node.parameters) {
+            if (!parameter.parameter_node.vaarg && !parameter.parameter_node.type) {
+                highlighter::error(context, context.current_file, parameter.range.from, parameter.range.to, "Untyped parameters are not allowed");
+            }
+
             LLVMTypeRef llvm_parameter_type = lookup::get_llvm_type(context, parameter, null);
             parameters.push(llvm_parameter_type);
         }
@@ -107,6 +112,10 @@ fn void _register_functions(CompileContext* context, Node* node) {
             if (parameter.parameter_node.vaarg) {
                 vaarg = true;
                 continue;
+            }
+            
+            if (!parameter.parameter_node.vaarg && !parameter.parameter_node.type) {
+                highlighter::error(context, context.current_file, parameter.range.from, parameter.range.to, "Untyped parameters are not allowed");
             }
 
             LLVMTypeRef llvm_parameter_type = lookup::get_llvm_type(context, parameter, null);

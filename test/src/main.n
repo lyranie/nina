@@ -1,11 +1,24 @@
 mod test.main;
 
-int main() {
-    if (!test()) {}
+ext void InitWindow( int width, int height,char* name);
+ext void BeginDrawing();
+ext void EndDrawing();
+ext void ClearBackground(Color);
+ext bool WindowShouldClose();
 
-    ret 0;
-}
+type Color(char r, char g, char b, char a);
 
-bool test() {
-    ret true;
+int main(){
+
+    int width = 9;
+    InitWindow(800,600,"foo");
+
+    Color col = new Color(255, 0, 0, 255);
+    while (!WindowShouldClose()){
+        BeginDrawing();
+        ClearBackground(col);
+        EndDrawing();
+    }
+    
+    ret 69;
 }
