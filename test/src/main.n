@@ -1,11 +1,14 @@
 mod test.main;
 
 int main() {
+<<<<<<< Updated upstream
     bool a = !true;
     bool b = !&0;
 
     if (!test()) {}
 
+=======
+>>>>>>> Stashed changes
     ret 0;
 }
 
