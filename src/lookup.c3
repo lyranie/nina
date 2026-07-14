@@ -123,6 +123,14 @@ fn LLVMTypeRef get_llvm_type(CompileContext* context, Node* node, Scope* scope) 
         }
     case NodeType.BOOL:
         return context.lookup.get("bool").llvm_type!!;
+    case NodeType.CALL:
+        FunctionInfo* function_info = get_function_info(context, node.call_node.name.path_node.path);
+
+        return get_llvm_type(context, function_info.node, scope);
+    case NodeType.FUNCTION:
+        return get_llvm_type(context, node.function_node.type, scope);
+    case NodeType.EXT:
+        return get_llvm_type(context, node.ext_node.type, scope);
     default:
         highlighter::panic("Missing get_llvm_type case for type '%s'", node.type);
     }
