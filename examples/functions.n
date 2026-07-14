@@ -1,0 +1,12 @@
+mod examples.functions;
+
+int main() {
+    test();
+
+    ret 0;
+}
+
+/*
+ * Functions can be declared in any order
+ */
+void test() {}

@@ -22,6 +22,8 @@ module nina::util;
 
 import nina::types;
 
+import libc;
+
 fn int precedence(TokenType type) {
     switch (type) {
         case TokenType.OR:
@@ -45,6 +47,17 @@ fn int precedence(TokenType type) {
         default:
             return 0;
     }
+}
+
+macro String @get_exec() {
+    $switch:
+    $case env::LINUX:
+        char[4096] buffer;
+
+        long len = libc::readlink("/proc/self/exe", &buffer, 4096);
+
+        return (String)buffer[..len];
+    $endswitch
 }
 
 module llvm;

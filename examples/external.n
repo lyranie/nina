@@ -1,0 +1,17 @@
+mod examples.external;
+
+/*
+ * you can declare external functions and call them like
+ * regular functions; currently only external functions
+ * support vaargs (...)
+ */
+ext int printf(char* fmt, args...);
+
+int main() {
+    /*
+     * Calls just like any other function
+     */
+    printf("Hello, World!\n");
+
+    ret 0;
+}

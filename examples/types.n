@@ -1,0 +1,28 @@
+mod example.types;
+
+use libc;
+
+/*
+ * These are structs; they can hold fields of any type and
+ * can be instantiated using the `new` keyword;
+ */
+type Person(char* name, int age);
+type Foo(Bar bar);
+type Bar();
+
+int main() {
+    /*
+     * Here we create a new instance of the above structs and
+     * assign values
+     */
+    Person p = new Person("Christoffer", 57);
+    Foo    f = new Foo(new Bar());
+
+    /*
+     * Now we can access the structs fields like in C and
+     * other languages
+     */
+    libc.printf("%s, %d\n", p.name, p.age);
+
+    ret 0;
+}

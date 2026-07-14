@@ -1,0 +1,15 @@
+mod examples.pointers;
+
+use libc;
+
+int main() {
+    /*
+     * Pointers can be created and their stored value altered
+     */
+    int* i;
+    *i = 69;
+
+    libc.printf("%d\n", *i);
+
+    ret 0;
+}

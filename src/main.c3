@@ -102,7 +102,10 @@ fn void compile(CompileContext* context) {
 }
 
 fn void add_stdlib(CompileContext* context) {
-    path::traverse("stdlib".to_path(context.alloc), fn bool?(path, is_dir, data) {
+    String exe    = util::@get_exec();
+    Path   stdlib = string::tformat("%s/stdlib", ((Path)exe).parent()).to_path(context.alloc)!!;
+
+    path::traverse(stdlib, fn bool?(path, is_dir, data) {
         CompileContext* context = (CompileContext*)data;
 
         if (!is_dir && path.has_extension("n")) {
