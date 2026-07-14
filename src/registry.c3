@@ -71,7 +71,7 @@ fn void _register_functions(CompileContext* context, Node* node) {
 
         foreach (Node* parameter : node.function_node.parameters) {
             if (!parameter.parameter_node.vaarg && !parameter.parameter_node.type) {
-                highlighter::error(context, context.current_file, parameter.range.from, parameter.range.to, "Untyped parameters are not allowed");
+                highlighter::error(context, context.current_file, parameter.range.from, parameter.range.to, "Unnamed parameters are not allowed");
             }
 
             LLVMTypeRef llvm_parameter_type = lookup::get_llvm_type(context, parameter, null);
@@ -115,7 +115,7 @@ fn void _register_functions(CompileContext* context, Node* node) {
             }
             
             if (!parameter.parameter_node.vaarg && !parameter.parameter_node.type) {
-                highlighter::error(context, context.current_file, parameter.range.from, parameter.range.to, "Untyped parameters are not allowed");
+                highlighter::error(context, context.current_file, parameter.range.from, parameter.range.to, "Unnamed parameters are not allowed");
             }
 
             LLVMTypeRef llvm_parameter_type = lookup::get_llvm_type(context, parameter, null);
