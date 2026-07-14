@@ -190,7 +190,6 @@ fn void analyse_ext(Analyser* analyser, CompileContext* context, Node* node) {
         }
 
         parameters.set(parameter_name, parameter);
-        scope::add_variable(analyser.scope, context.alloc, parameter_name, parameter);
     }
 }
 
