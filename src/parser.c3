@@ -274,6 +274,7 @@ fn Node* parse_factor(Parser* parser, CompileContext* context, Lexer* lexer) {
         node.range.to   = parser.current.range.end;
 
         consume(parser, context, lexer, TokenType.RPAREN);
+    case TokenType.BANG:
     case TokenType.PLUS:
     case TokenType.MINUS:    node = parse_unary(parser, context, lexer);
     case TokenType.KW_NEW:   node = parse_init(parser, context, lexer);

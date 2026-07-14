@@ -350,12 +350,18 @@ fn void analyse_unary(Analyser* analyser, CompileContext* context, Node* node) {
     String group = lookup::get_base_type_group(context, node, analyser.scope);
     String type  = lookup::get_type_name(context, node, analyser.scope);
 
-    switch (group) {
-    case "integer":
-    case "real":
-        break;
+    switch (node.unary_node.operator.type) {
+    case TokenType.PLUS:
+    case TokenType.MINUS:
+        if (group != "integer" && group != "real") {
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot use operator '%s' on type '%s'", node.unary_node.operator.value, type);
+        }
+    case TokenType.BANG:
+        if (group != "boolean" && group != "pointer") {
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot use operator '%s' on type '%s'", node.unary_node.operator.value, type);
+        }
     default:
-        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot use operator '%s' on type '%s'", node.unary_node.operator.value, type);
+        highlighter::panic();
     }
 }
 

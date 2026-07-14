@@ -109,6 +109,20 @@ fn LLVMTypeRef get_llvm_type(CompileContext* context, Node* node, Scope* scope) 
         return get_llvm_type(context, field_node.parameter_node.type, scope);
     case NodeType.BIN:
         return get_llvm_type(context, node.bin_node.left, scope);
+    case NodeType.INT:
+        return context.lookup.get("int").llvm_type!!;
+    case NodeType.UNARY:
+        switch (node.unary_node.operator.type) {
+        case TokenType.PLUS:
+        case TokenType.MINUS:
+            return get_llvm_type(context, node.unary_node.node, scope);
+        case TokenType.BANG:
+            return context.lookup.get("bool").llvm_type!!;
+        default:
+            highlighter::panic();
+        }
+    case NodeType.BOOL:
+        return context.lookup.get("bool").llvm_type!!;
     default:
         highlighter::panic("Missing get_llvm_type case for type '%s'", node.type);
     }
@@ -303,7 +317,15 @@ fn String get_type_name(CompileContext* context, Node* node, Scope* scope) {
             return get_type_name(context, node.bin_node.left, scope);
         }
     case NodeType.UNARY:
-        return get_type_name(context, node.unary_node.node, scope);
+        switch (node.unary_node.operator.type) {
+        case TokenType.PLUS:
+        case TokenType.MINUS:
+            return get_type_name(context, node.unary_node.node, scope);
+        case TokenType.BANG:
+            return "bool";
+        default:
+            highlighter::panic();
+        }
     case NodeType.CALL:
         String        name           = node.call_node.name.ident_node.name;
         FunctionInfo* function_info  = get_function_info(context, name);
@@ -415,7 +437,15 @@ fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope)
             return get_base_type_group(context, node.bin_node.left, scope);
         }
     case NodeType.UNARY:
-        return get_base_type_group(context, node.unary_node.node, scope);
+        switch (node.unary_node.operator.type) {
+        case TokenType.PLUS:
+        case TokenType.MINUS:
+            return get_base_type_group(context, node.unary_node.node, scope);
+        case TokenType.BANG:
+            return "boolean";
+        default:
+            highlighter::panic();
+        }
     case NodeType.CALL:
         String        name          = node.call_node.name.ident_node.name;
         FunctionInfo* function_info = get_function_info(context, name);

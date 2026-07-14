@@ -1,12 +1,8 @@
 mod test.main;
 
-use other;
-
 int main() {
-    Person a = new Person("", 0);
-    other.Person b = new other.Person("", 0);
-    other.Person c = new Person("", 0);
-    Person d = new other.Person("", 0);
+    bool a = !true;
+    bool b = !&0;
 
     ret 0;
 }

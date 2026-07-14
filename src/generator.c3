@@ -436,6 +436,7 @@ fn LLVMValueRef generate_access(Generator* generator, CompileContext* context, N
 
 fn LLVMValueRef generate_unary(Generator* generator, CompileContext* context, Node* node) {
     LLVMValueRef llvm_value = generate_node(generator, context, node.unary_node.node);
+    LLVMValueRef llvm_type  = lookup::get_llvm_type(context, node.unary_node.node, generator.scope);
 
     switch (node.unary_node.operator.type) {
     case TokenType.MINUS:
@@ -450,6 +451,14 @@ fn LLVMValueRef generate_unary(Generator* generator, CompileContext* context, No
         return llvm::build_f_mul(generator.llvm_builder, llvm_value, llvm::const_real(real_type, -1), "");
     case TokenType.PLUS:
         return llvm_value;
+    case TokenType.BANG:
+        if (lookup::get_base_type_group(context, node.unary_node.node, generator.scope) == "pointer") {
+            LLVMValueRef null_ptr = llvm::const_null(llvm_type);
+            
+            return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_EQ, llvm_value, null_ptr, "");
+        }
+        
+        return llvm::build_not(generator.llvm_builder, llvm_value, "");
     default:
         highlighter::panic();
     }
