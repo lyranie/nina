@@ -2,3 +2,7 @@
 [ ] bitwise operations
 [ ] compact lookup functions into one that return a struct instead of single values
 [ ] add bounds checks for integer types
+[ ] add reflection fields to types
+[ ] clean up access generator logic
+[ ] implement slices
+[ ] finish implementing interfaces
