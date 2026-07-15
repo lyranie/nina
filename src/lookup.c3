@@ -209,6 +209,10 @@ fn LLVMMetadataRef get_llvm_debug_type(CompileContext* context, Generator* gener
 }
 
 fn LLVMMetadataRef get_llvm_debug_type_from_kind(CompileContext* context, Generator* generator, LLVMTypeRef llvm_type, TypeInfo* type_info) {
+    if (!generator) {
+        return null;
+    }
+
     switch (llvm::get_type_kind(llvm_type)) {
     case LLVMTypeKind.VOID_TYPE_KIND:
         return null;
@@ -797,4 +801,82 @@ fn FunctionInfo* get_function_info(CompileContext* context, String name) {
         : string::tformat("%s.%s", context.current_module, name);
 
     return context.registry.functions.get(qualified_name) ?? null;
+}
+
+fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generator* generator = null) {
+    switch (node.type) {
+    case NodeType.FUNCTION:
+        LookupElement type_data = get(context, node.function_node.type, scope);
+
+        LLVMTypeRef     llvm_type       = type_data.llvm_type;
+        LLVMMetadataRef llvm_debug_type = type_data.llvm_debug_type;
+        String          type_name       = type_data.type_name;
+        String          type_group      = type_data.type_group;
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.TYPE:
+        String name        = node.type_node.name.ident_node.name;
+        String type_suffix = node.type_node.suffix;
+
+        TypeInfo*       type_info       = get_type_info(context, name);
+        LLVMTypeRef     llvm_type       = type_info.llvm_type;
+        LLVMMetadataRef llvm_debug_type = get_llvm_debug_type_from_kind(context, generator, llvm_type, type_info);
+        LLVMTypeKind    llvm_type_kind  = llvm::get_type_kind(llvm_type);
+
+        while (type_suffix.ends_with("*") || type_suffix.ends_with("[]")) {
+            switch (type_suffix[type_suffix.len - 1]) {
+            case '*':
+                type_suffix = type_suffix[:type_suffix.len - 1];
+                llvm_type   = llvm::pointer_type(llvm_type, 0);
+
+                if (generator) {
+                    llvm_debug_type = llvm::di_builder_create_pointer_type(generator.llvm_debug_builder, llvm_debug_type, 64, 0, 0, null, 0);
+                }
+            case ']':
+                type_suffix = type_suffix[:type_suffix.len - 1];
+                llvm_type   = llvm::slice_type(llvm_type);
+                
+                if (generator) {
+                    llvm_debug_type = llvm::di_builder_create_pointer_type(generator.llvm_debug_builder, llvm_debug_type, 64, 0, 0, null, 0);
+                }
+            }
+        }
+
+        if (llvm::get_type_kind(llvm_type) == LLVMTypeKind.STRUCT_TYPE_KIND && llvm::is_opaque_struct(llvm_type)) {
+            List{LLVMTypeRef} llvm_fields;
+            llvm_fields.tinit();
+            
+            foreach (Node* field : type_info.node.struct_node.fields) {
+                llvm_fields.push(get_llvm_type(context, field.parameter_node.type, scope));
+            }
+
+            llvm::struct_set_body(llvm_type, llvm_fields.to_array(context.alloc), (CUInt)llvm_fields.len(), llvm::FALSE);
+        }
+
+        String type_name  = string::format(context.alloc, "%s%s", name, type_suffix);;
+        String type_group;
+        
+        switch (llvm_type_kind) {
+        case LLVMTypeKind.INTEGER_TYPE_KIND:
+            CUInt width = llvm::get_int_type_width(llvm_type);
+
+            if (width == 1) {
+                type_group = "boolean";
+            }
+        
+            type_group = "integer";
+        }
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
+    default:
+        highlighter::panic("Missing lookup::get case for type '%s'", node.type);
+    }
+}
+
+/*
+struct LookupElement {
+    LLVMTypeRef     llvm_type;
+    LLVMMetadataRef llvm_debug_type;
+    String          type_name;
+    String          type_group;
 }

@@ -343,6 +343,13 @@ struct Lookup {
     inline HashMap{String, Type*} types;
 }
 
+struct LookupElement {
+    LLVMTypeRef     llvm_type;
+    LLVMMetadataRef llvm_debug_type;
+    String          type_name;
+    String          type_group;
+}
+
 struct Type {
     String      name;
     String      filepath;

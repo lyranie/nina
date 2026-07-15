@@ -93,7 +93,9 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
 
     scope::add_function(analyser.scope, context.alloc, name, analyser.module_name, context.current_file, node);
 
-    if (!always_returns(analyser, context, node) && lookup::get_type_name(context, node, analyser.scope) != "void")
+    LookupElement lookup_data = lookup::get(context, node, analyser.scope);
+
+    if (!always_returns(analyser, context, node) && lookup_data.type_name != "void")
     {
         highlighter::error(context, context.current_file, node.range.from, node.range.to, "Missing return at end of function");
     }
