@@ -847,7 +847,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             llvm_fields.tinit();
             
             foreach (Node* field : type_info.node.struct_node.fields) {
-                llvm_fields.push(get_llvm_type(context, field.parameter_node.type, scope));
+                llvm_fields.push(get(context, field.parameter_node.type, scope).llvm_type);
             }
 
             llvm::struct_set_body(llvm_type, llvm_fields.to_array(context.alloc), (CUInt)llvm_fields.len(), llvm::FALSE);
@@ -868,6 +868,57 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         }
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.CALL:
+        FunctionInfo* function_info = get_function_info(context, node.call_node.name.path_node.path);
+        LookupElement type_data     = get(context, function_info.node, scope);
+
+        LLVMTypeRef     llvm_type       = type_data.llvm_type;
+        LLVMMetadataRef llvm_debug_type = null;
+        String          type_name       = type_data.type_name;
+        String          type_group      = type_data.type_group;
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.EXT:
+        LookupElement type_data = get(context, node.ext_node.type, scope);
+
+        LLVMTypeRef     llvm_type       = type_data.llvm_type;
+        LLVMMetadataRef llvm_debug_type = type_data.llvm_debug_type;
+        String          type_name       = type_data.type_name;
+        String          type_group      = type_data.type_group;
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.IDENT:
+        String name     = node.ident_node.name;
+        Node*  variable = scope::get_variable(scope, name).node;
+
+        LookupElement type_data = get(context, variable, scope);
+
+        LLVMTypeRef     llvm_type       = type_data.llvm_type;
+        LLVMMetadataRef llvm_debug_type = type_data.llvm_debug_type;
+        String          type_name       = type_data.type_name;
+        String          type_group      = type_data.type_group;
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.VARIABLE:
+        LookupElement type_data = get(context, node.variable_node.type, scope);
+
+        LLVMTypeRef     llvm_type       = type_data.llvm_type;
+        LLVMMetadataRef llvm_debug_type = type_data.llvm_debug_type;
+        String          type_name       = type_data.type_name;
+        String          type_group      = type_data.type_group;
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.PARAMETER:
+        LookupElement type_data = get(context, node.parameter_node.type, scope);
+
+        LLVMTypeRef     llvm_type       = type_data.llvm_type;
+        LLVMMetadataRef llvm_debug_type = type_data.llvm_debug_type;
+        String          type_name       = type_data.type_name;
+        String          type_group      = type_data.type_group;
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.BIN:
+        break;
     default:
         highlighter::panic("Missing lookup::get case for type '%s'", node.type);
     }

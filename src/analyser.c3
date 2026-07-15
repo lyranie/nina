@@ -153,8 +153,8 @@ fn void analyse_ret(Analyser* analyser, CompileContext* context, Node* node, voi
         analyse_node(analyser, context, node.ret_node.value);
 
         if (!lookup::compare_type(context, function_type, node, analyser.scope)) {
-            String expected_type = lookup::get_type_name(context, function_type, analyser.scope);
-            String return_type   = lookup::get_type_name(context, node, analyser.scope);
+            String expected_type = lookup::get(context, function_type, analyser.scope).type_name;
+            String return_type   = lookup::get(context, node, analyser.scope).type_name;
 
             highlighter::error(context, context.current_file, node.range.from, node.range.to, "Expected return type '%s', got '%s'", expected_type, return_type);
         }
@@ -206,21 +206,19 @@ fn void analyse_bin(Analyser* analyser, CompileContext* context, Node* node, voi
     analyse_node(analyser, context, node.bin_node.left, data);
     analyse_node(analyser, context, node.bin_node.right, data);
 
-    String left_group  = lookup::get_base_type_group(context, node.bin_node.left, analyser.scope);
-    String right_group = lookup::get_base_type_group(context, node.bin_node.right, analyser.scope);
+    LookupElement left  = lookup::get(context, node.bin_node.left, analyser.scope);
+    LookupElement right = lookup::get(context, node.bin_node.right, analyser.scope);
 
-    bool pointer_arith = (left_group == "pointer" && right_group == "integer")
+    bool pointer_arith = (left.type_group == "pointer" && right.type_group == "integer")
         && (node.bin_node.operator.type == TokenType.PLUS || node.bin_node.operator.type == TokenType.MINUS);
 
     if (!pointer_arith && !lookup::compare_type(context, node.bin_node.left, node.bin_node.right, analyser.scope)) {
-        String left_type  = lookup::get_type_name(context, node.bin_node.left, analyser.scope);
-        String right_type = lookup::get_type_name(context, node.bin_node.right, analyser.scope);
 
-        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot operate type '%s' with type '%s'", left_type, right_type);
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot operate type '%s' with type '%s'", left.type_name, right.type_name);
     }
 
-    String group = lookup::get_base_type_group(context, node.bin_node.left, analyser.scope);
-    String type  = lookup::get_type_name(context, node.bin_node.left, analyser.scope);
+    String group = left.type_group;
+    String type  = left.type_name;
 
     switch (node.bin_node.operator.type) {
     case TokenType.PLUS:
