@@ -876,6 +876,39 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         return get(context, node.variable_node.type, scope);
     case NodeType.PARAMETER:
         return get(context, node.parameter_node.type, scope);
+    case NodeType.BIN:
+        switch (node.bin_node.operator.type) {
+        case TokenType.IS_EQUAL:
+        case TokenType.NOT_EQUAL:
+        case TokenType.GTE:
+        case TokenType.LTE:
+        case TokenType.LANGLE:
+        case TokenType.RANGLE:
+            // bool
+            TypeInfo*   type_info = get_type_info(context, "bool");
+            uint        width     = llvm::get_int_type_width(type_info.llvm_type);
+
+            LLVMTypeRef llvm_type       = type_info.llvm_type;
+            LLVMTypeRef llvm_debug_type = generator ? llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "bool", 4, width, 5, LLVMDIFlags.DI_FLAG_ZERO) : null;
+            String      type_name       = "bool";
+            String      type_group      = "boolean";
+
+            return { llvm_type, llvm_debug_type, type_name, type_group };
+        default:
+            return get(context, node.bin_node.left, scope);
+        }
+    case NodeType.INT:
+        TypeInfo*   type_info = get_type_info(context, "int");
+        uint        width     = llvm::get_int_type_width(type_info.llvm_type);
+
+        LLVMTypeRef llvm_type       = type_info.llvm_type;
+        LLVMTypeRef llvm_debug_type = generator ? llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "int", 3, width, 5, LLVMDIFlags.DI_FLAG_ZERO) : null;
+        String      type_name       = "int";
+        String      type_group      = "integer";
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.ACCESS:
+        
     default:
         highlighter::panic("Missing lookup::get case for type '%s'", node.type);
     }
