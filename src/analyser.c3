@@ -716,8 +716,8 @@ fn void handle_call(Analyser* analyser, CompileContext* context, Node* node, Str
         }
 
         if (!lookup::compare_type(context, parameter, argument, analyser.scope)) {
-            String parameter_type = lookup::get_type_name(context, parameter, analyser.scope);
-            String argument_type  = lookup::get_type_name(context, argument, analyser.scope);
+            String parameter_type = lookup::get(context, parameter, analyser.scope).type_name;
+            String argument_type  = lookup::get(context, argument, analyser.scope).type_name;
 
             highlighter::error(context, context.current_file, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", parameter_type, argument_type);
         }

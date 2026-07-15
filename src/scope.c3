@@ -138,8 +138,10 @@ fn void add_import(Scope* scope, String name) {
 }
 
 fn bool has_import(Scope* scope, String name) {
-    if (scope.imports.contains(name)) {
-        return true;
+    foreach (String use : scope.imports) {
+        if (use == name || use.ends_with(name)) {
+            return true;
+        }
     }
 
     if (scope.parent) {
@@ -149,8 +151,22 @@ fn bool has_import(Scope* scope, String name) {
     return false;
 }
 
-fn List{String} get_imports(Allocator alloc, Scope* scope) {
-    List{String} imports;
+fn String get_import(Scope* scope, String name) {
+    foreach (String use : scope.imports) {
+        if (use == name || use.ends_with(name)) {
+            return use;
+        }
+    }
+
+    if (scope.parent) {
+        return get_import(scope.parent, name);
+    }
+
+    return "";
+}
+
+fn StringList get_imports(Allocator alloc, Scope* scope) {
+    StringList imports;
     imports.init(alloc);
 
     imports.add_all(&&scope.imports);
