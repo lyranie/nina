@@ -1,0 +1,13 @@
+mod std.core.string;
+
+int len(char* s) {
+    char* t = s;
+    int i = 0;
+
+    while (*t != 0) {
+        t++;
+        i++;
+    }
+
+    ret i;
+}

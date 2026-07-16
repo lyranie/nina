@@ -1,45 +1,10 @@
 mod test.main;
 
+use std.core.string;
 use libc;
 
-ext int glfwInit();
-ext void glfwTerminate();
-ext void glfwWindowHint(int hint, int value);
-ext GLFWwindow* glfwCreateWindow(int width, int height, char* title, GLFWmonitor* monitor, GLFWwindow* share);
-ext void glfwDestroyWindow(GLFWwindow* window);
-ext int glfwWindowShouldClose(GLFWwindow* window);
-ext void glfwShowWindow(GLFWwindow* window);
-ext void glfwMakeContextCurrent(GLFWwindow* window);
-ext void glfwSwapBuffers(GLFWwindow* window);
-ext void glfwPollEvents();
-
-type GLFWwindow();
-type GLFWmonitor();
-
 int main() {
-    int GLFW_TRUE  = 1;
-    int GLFW_FALSE = 0;
-
-    int GLFW_VISIBLE = 131076; 
-
-    if (glfwInit() == GLFW_FALSE) {
-        libc.printf("Failed to initialize GLFW\n");
-        ret 1;
-    }
-
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    
-    GLFWwindow* handle = glfwCreateWindow(1280, 720, "Penis", null, null);
-    glfwShowWindow(handle);
-    glfwMakeContextCurrent(handle);
-
-    while (glfwWindowShouldClose(handle) == GLFW_FALSE) {
-        glfwPollEvents();
-        glfwSwapBuffers(handle);
-    }
-
-    glfwDestroyWindow(handle);
-    glfwTerminate();
+    libc.printf("%d\n", string.len("Penis"));
 
     ret 0;
 }

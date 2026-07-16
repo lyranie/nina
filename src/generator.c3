@@ -335,41 +335,51 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
 
         return llvm::build_s_div(generator.llvm_builder, left, right, "");
     case TokenType.RANGLE:
-        if (type == "real") {
-            return llvm::build_f_cmp(generator.llvm_builder, LLVMRealPredicate.REAL_OGT, left, right, "");
-        }
-
-        return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_SGT, left, right, "");
     case TokenType.LANGLE:
-        if (type == "real") {
-            return llvm::build_f_cmp(generator.llvm_builder, LLVMRealPredicate.REAL_OLT, left, right, "");
-        }
-
-        return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_SLT, left, right, "");
     case TokenType.LTE:
-        if (type == "real") {
-            return llvm::build_f_cmp(generator.llvm_builder, LLVMRealPredicate.REAL_OLE, left, right, "");
-        }
-
-        return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_SLE, left, right, "");
     case TokenType.IS_EQUAL:
-        if (type == "real") {
-            return llvm::build_f_cmp(generator.llvm_builder, LLVMRealPredicate.REAL_OEQ, left, right, "");
-        }
-
-        return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_EQ, left, right, "");
     case TokenType.NOT_EQUAL:
+    case TokenType.GTE: {
         if (type == "real") {
-            return llvm::build_f_cmp(generator.llvm_builder, LLVMRealPredicate.REAL_ONE, left, right, "");
+            LLVMRealPredicate pred;
+            switch (node.bin_node.operator.type) {
+            case TokenType.RANGLE:    pred = LLVMRealPredicate.REAL_OGT;
+            case TokenType.LANGLE:    pred = LLVMRealPredicate.REAL_OLT;
+            case TokenType.LTE:       pred = LLVMRealPredicate.REAL_OLE;
+            case TokenType.IS_EQUAL:  pred = LLVMRealPredicate.REAL_OEQ;
+            case TokenType.NOT_EQUAL: pred = LLVMRealPredicate.REAL_ONE;
+            case TokenType.GTE:       pred = LLVMRealPredicate.REAL_OGE;
+            default:
+                highlighter::panic();
+            }
+            return llvm::build_f_cmp(generator.llvm_builder, pred, left, right, "");
         }
 
-        return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_NE, left, right, "");
-    case TokenType.GTE:
-        if (type == "real") {
-            return llvm::build_f_cmp(generator.llvm_builder, LLVMRealPredicate.REAL_OGE, left, right, "");
+        LLVMTypeRef left_type  = llvm::type_of(left);
+        LLVMTypeRef right_type = llvm::type_of(right);
+
+        if (left_type != right_type) {
+            if (llvm::get_int_type_width(left_type) < llvm::get_int_type_width(right_type)) {
+                left = llvm::build_s_ext(generator.llvm_builder, left, right_type, "");
+            } else {
+                right = llvm::build_s_ext(generator.llvm_builder, right, left_type, "");
+            }
         }
 
-        return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_SGE, left, right, "");
+        LLVMIntPredicate pred;
+        switch (node.bin_node.operator.type) {
+        case TokenType.RANGLE:    pred = LLVMIntPredicate.INT_SGT;
+        case TokenType.LANGLE:    pred = LLVMIntPredicate.INT_SLT;
+        case TokenType.LTE:       pred = LLVMIntPredicate.INT_SLE;
+        case TokenType.IS_EQUAL:  pred = LLVMIntPredicate.INT_EQ;
+        case TokenType.NOT_EQUAL: pred = LLVMIntPredicate.INT_NE;
+        case TokenType.GTE:       pred = LLVMIntPredicate.INT_SGE;
+        default:
+            highlighter::panic();
+        }
+
+        return llvm::build_i_cmp(generator.llvm_builder, pred, left, right, "");
+    }
     default:
         highlighter::panic("Missing generate_bin case for operator type '%s'", node.bin_node.operator.type);
     }

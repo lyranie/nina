@@ -592,6 +592,14 @@ fn void analyse_assign(Analyser* analyser, CompileContext* context, Node* node) 
 fn void analyse_while(Analyser* analyser, CompileContext* context, Node* node, void* data) {
     analyse_node(analyser, context, node.while_node.expr);
 
+    switch (lookup::get(context, node.if_node.condition, analyser.scope).type_group) {
+    case "pointer":
+    case "boolean":
+        break;
+    default:
+        highlighter::error(context, context.current_file, node.if_node.condition.range.from, node.if_node.condition.range.to, "Expression must be a pointer or a bool");
+    }
+
     analyser.scope = scope::create(context.alloc, analyser.scope);
     analyse_compound(analyser, context, node.while_node.statements, data);
     analyser.scope = analyser.scope.parent;
