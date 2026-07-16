@@ -321,27 +321,110 @@ fn void analyse_use(Analyser* analyser, CompileContext* context, Node* node) {
     scope::add_import(analyser.scope, path);
 }
 
-fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) {
+fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
     Node*  path = node.access_node.name;
     String name = path.path_node.path;
 
-    bool module_found = false;
+    if (scope::has_import(analyser.scope, name)) {
+        DString full_name;
+        full_name.tinit();
 
-    foreach (String mod : analyser.imports) {
-        if (mod == name ||
-            mod.starts_with(string::tformat("%s.", name)) ||
-            mod.ends_with(string::tformat(".%s", name))) {
-            module_found = true;
+        String function_name;
+
+        Node* next = node;
+        while (next) {
+            switch (next.type) {
+            case NodeType.ACCESS:
+                full_name.append(next.access_node.name.ident_node.name);
+                full_name.append(".");
+
+                next = next.access_node.next;
+            case NodeType.CALL:
+                full_name.append(next.call_node.name.ident_node.name);
+                function_name = next.call_node.name.ident_node.name;
+
+                next = null;
+            default:
+                highlighter::panic();
+            }
+        }
+
+        String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+        String resolved_module   = scope::get_import(analyser.scope, short_module_name);
+
+        if (resolved_module == "") {
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", short_module_name);
+        }
+
+        DString resolved_full_name;
+        resolved_full_name.tinit();
+        resolved_full_name.append(resolved_module);
+        resolved_full_name.append(".");
+        resolved_full_name.append(function_name);
+
+        next = node;
+        while (next) {
+            switch (next.type) {
+            case NodeType.ACCESS:
+                next = next.access_node.next;
+            case NodeType.CALL:
+                handle_call(analyser, context, next, resolved_full_name.str_view(), resolved_module, lookup::get_function_info(context, resolved_full_name.str_view()));
+
+                next = null;
+            default:
+                highlighter::panic();
+            }
+        }
+
+        if (!context.registry.functions.has_key(resolved_full_name.str_view())) {
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", function_name, resolved_module);
+        }
+
+        return;
+    }
+
+    if (!scope::has_variable(analyser.scope, name)) {
+        highlighter::error(context, context.current_file, path.range.from, path.range.to, "Could not find '%s'", name);
+    }
+
+    // -- variable access --
+    VariableInfo* variable_info = scope::get_variable(analyser.scope, name);
+    LookupElement type_data     = lookup::get(context, variable_info.node, analyser.scope);
+
+    String base_group = type_data.type_group;
+    String type_name  = type_data.type_name;
+
+    if (base_group != "struct" && base_group != "pointer") {
+        highlighter::panic("type group is %s", base_group);
+    }
+
+    if (base_group == "pointer") {
+        type_name = type_name[:type_name.len - 1];
+    }
+
+    TypeInfo* type_info = lookup::get_type_info(context, type_name);
+
+    switch (node.access_node.next.type) {
+    case NodeType.IDENT:
+        break;
+    default:
+        highlighter::panic();
+    }
+
+    String   field_name = node.access_node.next.ident_node.name;
+    NodeList fields     = lookup::get_type_fields(context, type_info, analyser.scope);
+    String   field_type = lookup::get(context, node.access_node.name, analyser.scope).type_name;
+
+    Node* field_node;
+    foreach (Node* field : fields) {
+        if (field.parameter_node.name.ident_node.name == field_name) {
+            field_node = field;
             break;
         }
     }
 
-    if (module_found) {
-        traverse_access_module(analyser, context, node);
-    } else if (scope::has_variable(analyser.scope, name)) {
-        traverse_access_variable(analyser, context, node);
-    } else {
-        highlighter::error(context, context.current_file, path.range.from, path.range.to, "Could not find '%s'", name);
+    if (!field_node) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find field '%s' on type '%s'", field_name, field_type);
     }
 }
 
@@ -512,122 +595,6 @@ fn void analyse_while(Analyser* analyser, CompileContext* context, Node* node, v
     analyser.scope = scope::create(context.alloc, analyser.scope);
     analyse_compound(analyser, context, node.while_node.statements, data);
     analyser.scope = analyser.scope.parent;
-}
-
-fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
-    String name = node.access_node.name.path_node.path;
-    
-    DString full_name;
-    full_name.tinit();
-
-    String function_name;
-
-    Node* next = node;
-    while (next) {
-        switch (next.type) {
-        case NodeType.ACCESS:
-            full_name.append(next.access_node.name.ident_node.name);
-            full_name.append(".");
-
-            next = next.access_node.next;
-        case NodeType.CALL:
-            full_name.append(next.call_node.name.ident_node.name);
-            function_name = next.call_node.name.ident_node.name;
-
-            next = null;
-        default:
-            highlighter::panic();
-        }
-    }
-
-    String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
-
-    String resolved_module;
-    bool   found = false;
-
-    foreach (String mod : analyser.imports) {
-        if (mod == short_module_name || mod.ends_with(string::tformat(".%s", short_module_name))) {
-            resolved_module = mod;
-            found = true;
-            break;
-        }
-    }
-
-    if (!found) {
-        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", short_module_name);
-    }
-
-    DString resolved_full_name;
-    resolved_full_name.tinit();
-    resolved_full_name.append(resolved_module);
-    resolved_full_name.append(".");
-    resolved_full_name.append(function_name);
-
-    next = node;
-    while (next) {
-        switch (next.type) {
-        case NodeType.ACCESS:
-            next = next.access_node.next;
-        case NodeType.CALL:
-            handle_call(analyser, context, next, resolved_full_name.str_view(), resolved_module, lookup::get_function_info(context, resolved_full_name.str_view()));
-
-            next = null;
-        default:
-            highlighter::panic();
-        }
-    }
-
-    if (!context.registry.functions.has_key(resolved_full_name.str_view())) {
-        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", function_name, resolved_module);
-    }
-}
-
-fn void traverse_access_variable(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
-    String        name          = node.access_node.name.path_node.path;
-    VariableInfo* variable_info = scope::get_variable(analyser.scope, name);
-    LookupElement type_data     = lookup::get(context, variable_info.node, analyser.scope);
-
-    String base_group = type_data.type_group;
-    String type_name  = type_data.type_name;
-
-    if (base_group != "struct" && base_group != "pointer") {
-        highlighter::panic("type group is %s", base_group);
-    }
-
-    if (base_group == "pointer") {
-        type_name = type_name[:type_name.len - 1];
-    }
-
-    TypeInfo* type_info = lookup::get_type_info(context, type_name);
-
-    traverse_access_field(analyser, context, node, type_info);
-}
-
-fn void traverse_access_field(Analyser* analyser, CompileContext* context, Node* node, TypeInfo* type_info) => @pool() {
-    String name = node.access_node.name.path_node.path;
-
-    switch (node.access_node.next.type) {
-    case NodeType.IDENT:
-        break;
-    default:
-        highlighter::panic("traverse_access_field#access");
-    }
-
-    String   field_name = node.access_node.next.ident_node.name;
-    NodeList fields     = lookup::get_type_fields(context, type_info, analyser.scope);
-    String   field_type = lookup::get(context, node.access_node.name, analyser.scope).type_name;
-
-    Node* field_node;
-    foreach (Node* field : fields) {
-        if (field.parameter_node.name.ident_node.name == field_name) {
-            field_node = field;
-            break;
-        }
-    }
-
-    if (!field_node) {
-        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find field '%s' on type '%s'", field_name, field_type);
-    }
 }
 
 fn bool always_returns(Analyser* analyser, CompileContext* context, Node* node) {

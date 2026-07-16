@@ -416,26 +416,136 @@ fn bool generate_compound(Generator* generator, CompileContext* context, NodeLis
     return returned;
 }
 
-fn LLVMValueRef generate_access(Generator* generator, CompileContext* context, Node* node) {
+fn LLVMValueRef generate_access(Generator* generator, CompileContext* context, Node* node) => @pool() {
     Node*  path = node.access_node.name;
     String name = path.path_node.path;
 
-    bool module_found = false;
+    if (scope::has_import(generator.scope, name)) {
+        DString full_name;
+        full_name.tinit();
 
-    foreach (String mod : scope::get_imports(context.alloc, generator.scope)) {
-        if (mod == name ||
-            mod.starts_with(string::tformat("%s.", name)) ||
-            mod.ends_with(string::tformat(".%s", name))) {
-            module_found = true;
+        String function_name;
+
+        Node* next = node;
+        Node* last = null;
+        while (next) {
+            switch (next.type) {
+            case NodeType.ACCESS:
+                full_name.append(next.access_node.name.ident_node.name);
+                full_name.append(".");
+
+                last = next;
+                next = next.access_node.next;
+            case NodeType.CALL:
+                full_name.append(next.call_node.name.ident_node.name);
+                function_name = next.call_node.name.ident_node.name;
+
+                last = next;
+                next = null;
+            default:
+                highlighter::panic();
+            }
+        }
+
+        String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+        String resolved_module   = scope::get_import(generator.scope, short_module_name);
+
+        if (resolved_module == "") {
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", short_module_name);
+        }
+
+        DString resolved_full_name;
+        resolved_full_name.tinit();
+        resolved_full_name.append(resolved_module);
+        resolved_full_name.append(".");
+        resolved_full_name.append(function_name);
+
+        switch (last.type) {
+        case NodeType.CALL:
+            FunctionInfo* function_info = lookup::get_function_info(context, resolved_full_name.str_view());
+            List{LLVMValueRef} arguments;
+            arguments.init(context.alloc);
+
+            foreach (int i, Node* argument : last.call_node.arguments) {
+                Node* parameter_type = null;
+                switch (function_info.node.type) {
+                case NodeType.FUNCTION:
+                    if (i >= function_info.node.function_node.parameters.len()) {
+                        break;
+                    }
+
+                    parameter_type = function_info.node.function_node.parameters[i];
+                case NodeType.EXT:
+                    if (i >= function_info.node.ext_node.parameters.len()) {
+                        break;
+                    }
+
+                    parameter_type = function_info.node.ext_node.parameters[i];
+                default:
+                    highlighter::panic("Unreachable");
+                }
+
+                arguments.push(generate_node(generator, context, argument));
+            }
+
+            if (llvm::is_function_var_arg(function_info.llvm_type))
+            {
+                arguments.push(llvm::const_null(llvm::pointer_type(llvm::int_8_type(), 0)));
+            }
+
+            LLVMValueRef callee = get_or_declare_function(generator, context, function_info);
+
+            return llvm::build_call_2(
+                generator.llvm_builder,
+                function_info.llvm_type,
+                callee,
+                arguments.to_array(context.alloc),
+                (CUInt)arguments.len(),
+                ""
+            );
+        default:
+            highlighter::panic();
+        }
+    }
+
+    // -- variable access --
+    String        variable_name = node.access_node.name.path_node.path;
+    VariableInfo* variable_info = scope::get_variable(generator.scope, variable_name);
+    LookupElement type_data     = lookup::get(context, variable_info.node, generator.scope, generator);
+
+    String base_group = type_data.type_group;
+    String type_name  = type_data.type_name;
+
+    if (base_group == "pointer") {
+        type_name = type_name[:type_name.len - 1];
+    }
+
+    TypeInfo*    type_info    = lookup::get_type_info(context, type_name);
+    LLVMValueRef instance_ptr = variable_info.llvm_value;
+
+    if (base_group == "pointer") {
+        LLVMTypeRef ptr_llvm_type = type_data.llvm_type;
+
+        instance_ptr = llvm::build_load_2(generator.llvm_builder, ptr_llvm_type, instance_ptr, "");
+    }
+
+    String   field_name = node.access_node.next.ident_node.name;
+    NodeList fields      = lookup::get_type_fields(context, type_info, generator.scope);
+
+    uint  field_index = 0;
+    Node* field_node;
+    foreach (uint i, Node* field : fields) {
+        if (field.parameter_node.name.ident_node.name == field_name) {
+            field_index = i;
+            field_node = field;
             break;
         }
     }
 
-    if (module_found) {
-        return traverse_access_module(generator, context, node);
-    } else {
-        return traverse_access_variable(generator, context, node);
-    }
+    LLVMTypeRef  field_llvm_type = lookup::get(context, field_node, generator.scope, generator).llvm_type;
+    LLVMValueRef field_ptr       = llvm::build_struct_gep2(generator.llvm_builder, type_info.llvm_type, instance_ptr, field_index, "");
+
+    return llvm::build_load_2(generator.llvm_builder, field_llvm_type, field_ptr, "");
 }
 
 fn LLVMValueRef generate_unary(Generator* generator, CompileContext* context, Node* node) {
@@ -787,150 +897,6 @@ fn LLVMValueRef generate_real(Generator* generator, CompileContext* context, Nod
     debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
     return llvm::const_real(real_type, node.real_node.real.to_double())!!;
-}
-
-fn LLVMValueRef traverse_access_module(Generator* generator, CompileContext* context, Node* node) => @pool() {
-    DString full_name;
-    full_name.tinit();
-
-    String function_name;
-
-    Node*    next = node;
-    Node*    last = null;
-    while (next) {
-        switch (next.type) {
-        case NodeType.ACCESS:
-            full_name.append(next.access_node.name.ident_node.name);
-            full_name.append(".");
-
-            last = next;
-            next = next.access_node.next;
-        case NodeType.CALL:
-            full_name.append(next.call_node.name.ident_node.name);
-            function_name = next.call_node.name.ident_node.name;
-
-            last = next;
-            next = null;
-        default:
-            highlighter::panic();
-        }
-    }
-
-    String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
-
-    List{String} all_imports = scope::get_imports(context.alloc, generator.scope);
-
-    String resolved_module;
-    bool   found = false;
-
-    foreach (String mod : all_imports) {
-        if (mod == short_module_name || mod.ends_with(string::tformat(".%s", short_module_name))) {
-            resolved_module = mod;
-            found = true;
-            break;
-        }
-    }
-
-    if (!found) {
-        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", short_module_name);
-    }
-
-    DString resolved_full_name;
-    resolved_full_name.tinit();
-    resolved_full_name.append(resolved_module);
-    resolved_full_name.append(".");
-    resolved_full_name.append(function_name);
-
-    switch (last.type) {
-    case NodeType.CALL:
-        FunctionInfo* function_info = lookup::get_function_info(context, resolved_full_name.str_view());
-        List{LLVMValueRef} arguments;
-        arguments.init(context.alloc);
-
-        foreach (int i, Node* argument : last.call_node.arguments) {
-            Node* parameter_type = null;
-            switch (function_info.node.type) {
-            case NodeType.FUNCTION:
-                if (i >= function_info.node.function_node.parameters.len()) {
-                    break;
-                }
-
-                parameter_type = function_info.node.function_node.parameters[i];
-            case NodeType.EXT:
-                if (i >= function_info.node.ext_node.parameters.len()) {
-                    break;
-                }
-
-                parameter_type = function_info.node.ext_node.parameters[i];
-            default:
-                highlighter::panic("Unreachable");
-            }
-
-            arguments.push(generate_node(generator, context, argument));
-        }
-
-        if (llvm::is_function_var_arg(function_info.llvm_type))
-        {
-            arguments.push(llvm::const_null(llvm::pointer_type(llvm::int_8_type(), 0)));
-        }
-
-        LLVMValueRef callee = get_or_declare_function(generator, context, function_info);
-
-        return llvm::build_call_2(
-            generator.llvm_builder,
-            function_info.llvm_type,
-            callee,
-            arguments.to_array(context.alloc),
-            (CUInt)arguments.len(),
-            ""
-        );
-    default:
-        highlighter::panic();
-    }
-}
-
-fn LLVMValueRef traverse_access_variable(Generator* generator, CompileContext* context, Node* node) => @pool() {
-    String        name          = node.access_node.name.path_node.path;
-    VariableInfo* variable_info = scope::get_variable(generator.scope, name);
-    LookupElement type_data     = lookup::get(context, variable_info.node, generator.scope, generator);
-    
-    String base_group = type_data.type_group;
-    String type_name  = type_data.type_name;
-
-    if (base_group == "pointer") {
-        type_name = type_name[:type_name.len - 1];
-    }
-
-    TypeInfo*    type_info = lookup::get_type_info(context, type_name);
-    LLVMValueRef base      = variable_info.llvm_value;
-
-    if (base_group == "pointer") {
-        LLVMTypeRef ptr_llvm_type = type_data.llvm_type;
-
-        base = llvm::build_load_2(generator.llvm_builder, ptr_llvm_type, base, "");
-    }
-
-    return traverse_access_field(generator, context, node, type_info, base);
-}
-
-fn LLVMValueRef traverse_access_field(Generator* generator, CompileContext* context, Node* node, TypeInfo* type_info, LLVMValueRef instance_ptr) => @pool() {
-    String   field_name = node.access_node.next.ident_node.name;
-    NodeList fields      = lookup::get_type_fields(context, type_info, generator.scope);
-
-    uint  field_index = 0;
-    Node* field_node;
-    foreach (uint i, Node* field : fields) {
-        if (field.parameter_node.name.ident_node.name == field_name) {
-            field_index = i;
-            field_node = field;
-            break;
-        }
-    }
-
-    LLVMTypeRef  field_llvm_type = lookup::get(context, field_node, generator.scope, generator).llvm_type;
-    LLVMValueRef field_ptr       = llvm::build_struct_gep2(generator.llvm_builder, type_info.llvm_type, instance_ptr, field_index, "");
-
-    return llvm::build_load_2(generator.llvm_builder, field_llvm_type, field_ptr, "");
 }
 
 fn LLVMValueRef get_or_declare_function(Generator* generator, CompileContext* context, FunctionInfo* function_info) {
