@@ -68,6 +68,8 @@ fn void tokenize(Lexer* lexer, CompileContext* context) {
             number(lexer, context);
         } else if (lexer.current == '"') {
             string(lexer, context);
+        } else if (lexer.current == '\'') {
+            character(lexer, context);
         } else if (lexer.current == '.' && peek(lexer) == '.' && peek(lexer, 2) == '.') {
             make_token(lexer, TokenType.ELLIPSE, "...");
         } else if (lexer.current == '|' && peek(lexer) == '|') {
@@ -271,6 +273,42 @@ fn void string(Lexer* lexer, CompileContext* context) => @pool() {
     lexer.context.tokens.push({
         .type  = TokenType.STRING,
         .value = string.copy_str(context.alloc),
+        .range = {
+            .start = start,
+            .end   = end
+        }
+    });
+}
+
+fn void character(Lexer* lexer, CompileContext* context) => @pool() {
+    Range start = { lexer.range.line, lexer.range.column };
+
+    consume(lexer, column: true);
+
+    DString character;
+    character.tinit();
+
+    if (lexer.current == '\\') {
+        consume(lexer, column: true);
+
+        switch (lexer.current) {
+        case 'n':
+            character.append("\n");
+        }
+
+        consume(lexer, column: true);
+    } else {
+        character.append(lexer.current);
+        consume(lexer, column: true);
+    }
+
+    consume(lexer, column: true);
+
+    Range end = { lexer.range.line, lexer.range.column };
+    
+    lexer.context.tokens.push({
+        .type  = TokenType.CHAR,
+        .value = character.copy_str(context.alloc),
         .range = {
             .start = start,
             .end   = end

@@ -6,6 +6,18 @@ use libc;
 // TODO: turn into macro or add parameter type checking
 // NOTE: maybe allow function name overloading for different type + parameter configurations \
 // mangle name e.g. `@std.io.printn+<hash>` where hash is a bernstein hash of all type names appended
-void printn(str s) {
+void printns(str s) {
     libc.printf("%s\n", s.ptr);
+}
+
+void printni(int i) {
+    libc.printf("%d\n", i);
+}
+
+void printnb(bool b) {
+    if (b) {
+        libc.printf("true\n");
+    } else {
+        libc.printf("false\n");
+    }
 }

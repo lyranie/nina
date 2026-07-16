@@ -55,6 +55,7 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
     case NodeType.ASSIGN:      analyse_assign(analyser, context, node);
     case NodeType.WHILE:       analyse_while(analyser, context, node, data);
     case NodeType.REAL:        break;
+    case NodeType.CHAR:        break;
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -237,7 +238,9 @@ fn void analyse_bin(Analyser* analyser, CompileContext* context, Node* node, voi
         }
     case TokenType.IS_EQUAL:
     case TokenType.NOT_EQUAL:
-        break; // no need to check; only here to signal it's handled
+        if (group == "struct") {
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot use oprtator '%s' with type '%s'", node.bin_node.operator.value, type);
+        }
     default:
         break;
     }

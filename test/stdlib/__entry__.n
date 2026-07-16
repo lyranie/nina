@@ -1,0 +1,11 @@
+mod test.entry;
+
+use test.std.core.math;
+use test.std.core.string;
+
+int main() {
+    math.test();
+    string.test();
+
+    ret 0;
+}

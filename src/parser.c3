@@ -282,6 +282,7 @@ fn Node* parse_factor(Parser* parser, CompileContext* context, Lexer* lexer) {
     case TokenType.AMP:      node = parse_reference(parser, context, lexer);
     case TokenType.ASTERISK: node = parse_dereference(parser, context, lexer);
     case TokenType.REAL:     node = parse_real(parser, context, lexer);
+    case TokenType.CHAR:     node = parse_char(parser, context, lexer);
     default:
         highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Expression expected, got '%s'", parser.current.type);
     }
@@ -765,6 +766,21 @@ fn Node* parse_real(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     return @make_node(context, NodeType.REAL, start, end; node) {
         node.real_node.real = real;
+    };
+}
+
+fn Node* parse_char(Parser* parser, CompileContext* context, Lexer* lexer) {
+    @todo("pass base from token data");
+
+    Range start = parser.current.range.start;
+    Range end   = parser.current.range.end;
+
+    String character = parser.current.value;
+
+    consume(parser, context, lexer, TokenType.CHAR);
+
+    return @make_node(context, NodeType.CHAR, start, end; node) {
+        node.char_node.character = character;
     };
 }
 

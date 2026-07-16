@@ -99,6 +99,7 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
     case NodeType.NULL:        return generate_null(generator, context, node);
     case NodeType.WHILE:              generate_while(generator, context, node);
     case NodeType.REAL:        return generate_real(generator, context, node);
+    case NodeType.CHAR:        return generate_char(generator, context, node);
     default:
         highlighter::panic("Missing generator function for type '%s'", node.type);
     }
@@ -913,6 +914,14 @@ fn LLVMValueRef generate_real(Generator* generator, CompileContext* context, Nod
     debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
     return llvm::const_real(real_type, node.real_node.real.to_double())!!;
+}
+
+fn LLVMValueRef generate_char(Generator* generator, CompileContext* context, Node* node) {
+    LLVMTypeRef char_type = context.lookup.get("char").llvm_type!!;
+
+    debug::set_location(generator, context, node.range.from.line, node.range.from.column);
+
+    return llvm::const_int(char_type, (ulong)node.char_node.character[0], llvm::TRUE);
 }
 
 fn LLVMValueRef get_or_declare_function(Generator* generator, CompileContext* context, FunctionInfo* function_info) {

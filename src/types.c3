@@ -86,6 +86,7 @@ enum TokenType {
     TRUE,
     FALSE,
     NULL,
+    CHAR,
 
     KW_MOD,
     KW_RET,
@@ -255,6 +256,9 @@ struct Node {
         struct real_node {
             String real;
         }
+        struct char_node {
+            String character;
+        }
     }
 }
 
@@ -287,6 +291,7 @@ enum NodeType {
     WHILE,
     BASE,
     REAL,
+    CHAR,
 }
 
 struct FunctionSignature {

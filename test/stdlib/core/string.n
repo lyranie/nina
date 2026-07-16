@@ -1,0 +1,15 @@
+mod test.std.core.string;
+
+use test;
+use std.core.string;
+
+void test() {
+    str a = string.create("Test");
+    str b = string.create("Other");
+
+    test.assert(!string.equals(a, b), "equals(a, b) should be false");
+    test.assert(string.len(a) == 4, "len(a) should be 4");
+    test.assert(string.len(b) == 5, "len(b) should be 5");
+    test.assert(string.index_of(b, 'e') == 3, "index_of(b, 'e') should be 3");
+    test.assert(string.index_of(b, 'y') == -1, "index_of(b, 'y') should be -1");
+}

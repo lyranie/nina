@@ -160,9 +160,9 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
 
             if (width == 1) {
                 type_group = "boolean";
+            } else {
+                type_group = "integer";
             }
-
-            type_group = "integer";
         case LLVMTypeKind.POINTER_TYPE_KIND:
             type_group = "pointer";
         case LLVMTypeKind.STRUCT_TYPE_KIND:
@@ -400,6 +400,14 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
         String          type_name       = "real";
         String          type_group      = "real";
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.CHAR:
+        TypeInfo*       type_info       = get_type_info(context, "char");
+        LLVMTypeRef     llvm_type       = type_info.llvm_type;
+        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
+        String          type_name       = "char";
+        String          type_group      = "character";
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
     default:

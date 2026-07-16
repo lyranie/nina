@@ -3,10 +3,14 @@ mod std.core.string;
 type str(char* ptr, int len);
 
 str create(char* s) {
-    ret new str(s, len(s));
+    ret new str(s, len_char(s));
 }
 
-int len(char* s) {
+int len(str s) {
+    ret len_char(s.ptr);
+}
+
+int len_char(char* s) {
     char* t = s;
     int i = 0;
 
@@ -16,4 +20,44 @@ int len(char* s) {
     }
 
     ret i;
+}
+
+int index_of(str s, char c) {
+    ret index_of_char(s.ptr, c);
+}
+
+int index_of_char(char* s, char c) {
+    char* t       = s;
+    int   i       = 0;
+
+    while (*t != 0) {
+        if (*t == c) {
+            ret i;
+        }
+
+        t++;
+        i++;
+    }
+
+    ret -1;
+}
+
+bool equals(str a, str b) {
+    if (a.len != b.len) {
+        ret false;
+    }
+
+    char* at = a.ptr;
+    char* bt = b.ptr;
+
+    while (*at != 0) {
+        if (*at != *bt) {
+            ret false;
+        }
+
+        at++;
+        bt++;
+    }
+
+    ret true;
 }

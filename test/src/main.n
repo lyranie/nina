@@ -3,10 +3,17 @@ mod test.main;
 use std.core.string;
 use std.io;
 
+use libc;
+
 int main() {
     str name = string.create("Allie");
 
-    io.printn(name);
+    io.printns(name);
+    io.printni(string.index_of(name, 'i'));
+    io.printni(string.index_of_char(name.ptr, 'i'));
+    io.printnb(string.equals(name, string.create("Allie")));
+    io.printnb(string.equals(name, string.create("Allies")));
+    io.printnb(string.equals(name, string.create("Allue")));
 
     ret 0;
 }
