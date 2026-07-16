@@ -1,5 +1,11 @@
 mod std.core.string;
 
+type str(char* ptr, int len);
+
+str create(char* s) {
+    ret new str(s, len(s));
+}
+
 int len(char* s) {
     char* t = s;
     int i = 0;

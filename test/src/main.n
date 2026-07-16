@@ -1,10 +1,12 @@
 mod test.main;
 
 use std.core.string;
-use libc;
+use std.io;
 
 int main() {
-    libc.printf("%d\n", string.len("Penis"));
+    str name = string.create("Allie");
+
+    io.printn(name);
 
     ret 0;
 }

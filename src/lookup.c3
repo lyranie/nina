@@ -163,6 +163,10 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             }
 
             type_group = "integer";
+        case LLVMTypeKind.POINTER_TYPE_KIND:
+            type_group = "pointer";
+        case LLVMTypeKind.STRUCT_TYPE_KIND:
+            type_group = "struct";
         }
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
@@ -239,6 +243,8 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
                     next = next.access_node.next;
                 }
             }
+
+            highlighter::panic();
         }
 
         LookupElement type_data = get(context, variable_info.node, scope, generator);

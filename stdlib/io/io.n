@@ -1,10 +1,11 @@
 mod std.io;
 
+use std.core.string;
 use libc;
 
 // TODO: turn into macro or add parameter type checking
 // NOTE: maybe allow function name overloading for different type + parameter configurations \
 // mangle name e.g. `@std.io.printn+<hash>` where hash is a bernstein hash of all type names appended
-void printn(char* s) {
-    libc.printf("%s\n", s);
+void printn(str s) {
+    libc.printf("%s\n", s.ptr);
 }
