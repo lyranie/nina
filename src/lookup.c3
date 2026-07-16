@@ -116,7 +116,7 @@ fn FunctionInfo* get_function_info(CompileContext* context, String name) {
 fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generator* generator = null) {
     switch (node.type) {
     case NodeType.FUNCTION:
-        return get(context, node.function_node.type, scope);
+        return get(context, node.function_node.type, scope, generator);
     case NodeType.TYPE:
         String name        = node.type_node.name.ident_node.name;
         String type_suffix = node.type_node.suffix;
@@ -169,18 +169,18 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
     case NodeType.CALL:
         FunctionInfo* function_info = get_function_info(context, node.call_node.name.path_node.path);
 
-        return get(context, function_info.node, scope);
+        return get(context, function_info.node, scope, generator);
     case NodeType.EXT:
-        return get(context, node.ext_node.type, scope);
+        return get(context, node.ext_node.type, scope, generator);
     case NodeType.IDENT:
         String name     = node.ident_node.name;
         Node*  variable = scope::get_variable(scope, name).node;
 
-        return get(context, variable, scope);
+        return get(context, variable, scope, generator);
     case NodeType.VARIABLE:
-        return get(context, node.variable_node.type, scope);
+        return get(context, node.variable_node.type, scope, generator);
     case NodeType.PARAMETER:
-        return get(context, node.parameter_node.type, scope);
+        return get(context, node.parameter_node.type, scope, generator);
     case NodeType.BIN:
         switch (node.bin_node.operator.type) {
         case TokenType.IS_EQUAL:
@@ -198,7 +198,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
 
             return { llvm_type, llvm_debug_type, type_name, type_group };
         default:
-            return get(context, node.bin_node.left, scope);
+            return get(context, node.bin_node.left, scope, generator);
         }
     case NodeType.INT:
         TypeInfo*       type_info       = get_type_info(context, "int");
@@ -232,7 +232,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
                     String        call_name     = string::format(context.alloc, "%s.%s", resolved_module, function_name);
                     FunctionInfo* function_info = get_function_info(context, call_name);
 
-                    return get(context, function_info.node, scope);
+                    return get(context, function_info.node, scope, generator);
                 default:
                     full_name.append(next.access_node.name.ident_node.name);
 
@@ -241,7 +241,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             }
         }
 
-        LookupElement type_data = get(context, variable_info.node, scope);
+        LookupElement type_data = get(context, variable_info.node, scope, generator);
         String        type_name = type_data.type_name;
 
         if (type_data.type_group == "pointer") {
@@ -262,7 +262,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
 
         // maybe return null if field_node is null
 
-        return get(context, field_node.parameter_node.type, scope);
+        return get(context, field_node.parameter_node.type, scope, generator);
     case NodeType.STRING:
         TypeInfo*       type_info       = get_type_info(context, "String");
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
@@ -273,7 +273,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         return { llvm_type, llvm_debug_type, type_name, type_group };
     case NodeType.RET:
         if (node.ret_node.value) {
-            return get(context, node.ret_node.value, scope);
+            return get(context, node.ret_node.value, scope, generator);
         }
 
         TypeInfo*       type_info       = get_type_info(context, "void");
@@ -285,7 +285,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         return { llvm_type, llvm_debug_type, type_name, type_group };
     case NodeType.NULL:
         // change `null` to pointertype later
-        LLVMTypeRef     llvm_type       = null;
+        LLVMTypeRef     llvm_type       = llvm::pointer_type(llvm::int_8_type(), 0);
         LLVMMetadataRef llvm_debug_type = generator ? llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "null", 4, 64, 5, LLVMDIFlags.DI_FLAG_ZERO) : null;
         String          type_name       = "null";
         String          type_group      = "pointer";
@@ -302,7 +302,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
     case NodeType.INIT:
         TypeInfo* type_info = get_type_info(context, node.init_node.name.path_node.path);
 
-        return get(context, type_info.node, scope);
+        return get(context, type_info.node, scope, generator);
     case NodeType.STRUCT:
         String          name            = node.type_node.name.ident_node.name;
         TypeInfo*       type_info       = get_type_info(context, name);
@@ -313,7 +313,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
     case NodeType.DEREFERENCE:
-        LookupElement type_data = get(context, node.dereference_node.node, scope);
+        LookupElement type_data = get(context, node.dereference_node.node, scope, generator);
 
         LLVMTypeKind pointee_type_kind = llvm::get_type_kind(type_data.llvm_type);
 
@@ -366,12 +366,34 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             highlighter::panic("Missing get_base_type_group#DEREFERENCE case for type kind '%s'", pointee_type_kind);
         }
     case NodeType.REFERENCE:
-        LookupElement type_data = get(context, node.reference_node.node, scope);
+        LookupElement type_data = get(context, node.reference_node.node, scope, generator);
 
         LLVMTypeRef     llvm_type       = llvm::pointer_type(type_data.llvm_type, 0);
         LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, null, type_data.llvm_debug_type);
         String          type_name       = string::format(context.alloc, "%s*", type_data.type_name);
         String          type_group      = "pointer";
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.UNARY:
+        switch (node.unary_node.operator.type) {
+        case TokenType.BANG:
+            // bool
+            TypeInfo*       type_info       = get_type_info(context, "bool");
+            LLVMTypeRef     llvm_type       = type_info.llvm_type;
+            LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
+            String          type_name       = "bool";
+            String          type_group      = "boolean";
+
+            return { llvm_type, llvm_debug_type, type_name, type_group };
+        default:
+            return get(context, node.bin_node.left, scope, generator);
+        }
+    case NodeType.REAL:
+        TypeInfo*       type_info       = get_type_info(context, "real");
+        LLVMTypeRef     llvm_type       = type_info.llvm_type;
+        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
+        String          type_name       = "real";
+        String          type_group      = "real";
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
     default:
@@ -395,10 +417,6 @@ fn LLVMMetadataRef create_debug_type(CompileContext* context, Generator* generat
             name.free(context.alloc);
             name = "bool";
         }
-
-        io::printn(name);
-        io::printn(width);
-        io::printn(generator.llvm_debug_builder);
 
         return llvm::di_builder_create_basic_type(generator.llvm_debug_builder, (CChar*)name.ptr, (CUInt)name.len, width, 5, LLVMDIFlags.DI_FLAG_ZERO);
     case LLVMTypeKind.STRUCT_TYPE_KIND:

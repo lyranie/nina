@@ -8,7 +8,7 @@ import nina::lookup;
 import std::collections::list;
 import std::io;
 
-fn void add_function(Generator* generator, CompileContext* context, Node* node, LLVMValueRef llvm_function_value) {
+fn void add_function(Generator* generator, CompileContext* context, Node* node, LLVMValueRef llvm_function_value, bool is_definition = true) {
     if (context.args.no_debug) {
         return;
     }
@@ -48,7 +48,7 @@ fn void add_function(Generator* generator, CompileContext* context, Node* node, 
         line,
         llvm_subroutine_type,
         llvm::FALSE,
-        llvm::TRUE,
+        is_definition ? llvm::TRUE : llvm::FALSE,
         line,
         LLVMDIFlags.DI_FLAG_ZERO,
         llvm::FALSE

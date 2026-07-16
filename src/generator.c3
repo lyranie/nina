@@ -206,7 +206,7 @@ fn void generate_ext(Generator* generator, CompileContext* context, Node* node) 
         llvm_function_value
     );
 
-    debug::add_function(generator, context, node, llvm_function_value);
+    // debug::add_function(generator, context, node, llvm_function_value, false);
 }
 
 fn LLVMValueRef generate_call(Generator* generator, CompileContext* context, Node* node) => @pool() {
@@ -358,6 +358,12 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
         }
 
         return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_EQ, left, right, "");
+    case TokenType.NOT_EQUAL:
+        if (type == "real") {
+            return llvm::build_f_cmp(generator.llvm_builder, LLVMRealPredicate.REAL_ONE, left, right, "");
+        }
+
+        return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_NE, left, right, "");
     case TokenType.GTE:
         if (type == "real") {
             return llvm::build_f_cmp(generator.llvm_builder, LLVMRealPredicate.REAL_OGE, left, right, "");

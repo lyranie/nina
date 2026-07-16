@@ -1,12 +1,16 @@
 mod test.bin;
 
 void test() {
-    int test  = 1 + 1;
-    int test1 = 1 - 1;
-    int test2 = 1 * 1;
-    int test3 = 1 / 1;
-    int test4 = (2 + 2) * 2;
-    int test5 = 2 + 2 * 2;
+    int  test  = 1 + 1;
+    int  test1 = 1 - 1;
+    int  test2 = 1 * 1;
+    int  test3 = 1 / 1;
+    int  test4 = (2 + 2) * 2;
+    int  test5 = 2 + 2 * 2;
+    bool test6 = 1 == 1;
+    bool test7 = 1 != 1;
+    bool test8 = 1 >= 1;
+    bool test9 = 1 <= 1;
 }
 
 /*
@@ -24,6 +28,14 @@ entry:
   store i32 8, ptr %test4, align 4
   %test5 = alloca i32, align 4
   store i32 6, ptr %test5, align 4
+  %test6 = alloca i1, align 1
+  store i1 true, ptr %test6, align 1
+  %test7 = alloca i1, align 1
+  store i1 false, ptr %test7, align 1
+  %test8 = alloca i1, align 1
+  store i1 true, ptr %test8, align 1
+  %test9 = alloca i1, align 1
+  store i1 true, ptr %test9, align 1
   ret void
   unreachable
 }

@@ -116,7 +116,7 @@ fn void _register_functions(CompileContext* context, Node* node) {
             highlighter::error(context, context.current_file, node.ext_node.type.range.from, node.ext_node.type.range.to, "Could not find type '%s'", node.ext_node.type.type_node.name.path_node.path);
         }
     
-        LLVMTypeRef return_type = lookup::get(context, node.function_node.type, null).llvm_type;
+        LLVMTypeRef return_type = lookup::get(context, node.ext_node.type, null).llvm_type;
 
         List{LLVMTypeRef} parameters;
         parameters.tinit();
