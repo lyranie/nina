@@ -125,6 +125,11 @@ enum TokenType {
     RANGLE,
     BANG,
     COLON,
+    PIPE,
+    CARET,
+    TILDA,
+    SHL,
+    SHR,
 }
 
 struct Parser {

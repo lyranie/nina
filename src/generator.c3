@@ -335,6 +335,16 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
         }
 
         return llvm::build_s_div(generator.llvm_builder, left, right, "");
+    case TokenType.AMP:
+        return llvm::build_and(generator.llvm_builder, left, right, "");
+    case TokenType.PIPE:
+        return llvm::build_or(generator.llvm_builder, left, right, "");
+    case TokenType.CARET:
+        return llvm::build_xor(generator.llvm_builder, left, right, "");
+    case TokenType.SHL:
+        return llvm::build_shl(generator.llvm_builder, left, right, "");
+    case TokenType.SHR:
+        return llvm::build_a_shr(generator.llvm_builder, left, right, "");
     case TokenType.RANGLE:
     case TokenType.LANGLE:
     case TokenType.LTE:
@@ -589,6 +599,8 @@ fn LLVMValueRef generate_unary(Generator* generator, CompileContext* context, No
             return llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_EQ, llvm_value, null_ptr, "");
         }
         
+        return llvm::build_not(generator.llvm_builder, llvm_value, "");
+    case TokenType.TILDA:
         return llvm::build_not(generator.llvm_builder, llvm_value, "");
     default:
         highlighter::panic();

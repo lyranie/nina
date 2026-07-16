@@ -1,8 +1,29 @@
 mod test.bitwise;
 
 void test() {
-    
+    int test  = 0xAA & 0x55;
+    int test1 = 0xAA | 0x55;
+    int test2 = 0xAA ^ 0x55;
+    int test3 = ~0xAA;
+    int test4 = 0xF << 0x2;
+    int test5 = 0xFF >> 0x2;
 }
 
 /*
-balls
+define void @test.bitwise.test() {
+entry:
+  %test = alloca i32, align 4
+  store i32 0, ptr %test, align 4
+  %test1 = alloca i32, align 4
+  store i32 255, ptr %test1, align 4
+  %test2 = alloca i32, align 4
+  store i32 255, ptr %test2, align 4
+  %test3 = alloca i32, align 4
+  store i32 -171, ptr %test3, align 4
+  %test4 = alloca i32, align 4
+  store i32 60, ptr %test4, align 4
+  %test5 = alloca i32, align 4
+  store i32 63, ptr %test5, align 4
+  ret void
+  unreachable
+}

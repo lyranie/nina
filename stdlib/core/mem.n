@@ -1,0 +1,7 @@
+mod std.core.mem;
+
+use libc;
+
+void* copy(void* dst, void* src, int len) {
+    ret libc.memcpy(dst, src, len);
+}

@@ -446,6 +446,10 @@ fn void analyse_unary(Analyser* analyser, CompileContext* context, Node* node) {
         if (group != "boolean" && group != "pointer") {
             highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot use operator '%s' on type '%s'", node.unary_node.operator.value, type);
         }
+    case TokenType.TILDA:
+        if (group != "integer") {
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot use operator '%s' on type '%s'", node.unary_node.operator.value, type);
+        }
     default:
         highlighter::panic();
     }

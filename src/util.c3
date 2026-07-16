@@ -6,6 +6,12 @@ fn bool char.is_newline(self) {
     return self == '\n' || self == '\r';
 }
 
+fn bool char.is_hex_digit(self) {
+    return (self >= '0' && self <= '9') || 
+           (self >= 'a' && self <= 'f') || 
+           (self >= 'A' && self <= 'F');
+}
+
 macro @todo(String fmt, args...) @builtin {
 $if $feature(DEBUG):
     io::print(ansi::color_rgb(255, 204, 255, true));
@@ -30,20 +36,29 @@ fn int precedence(TokenType type) {
             return 1;
         case TokenType.AND:
             return 2;
+        case TokenType.PIPE:
+            return 3;
+        case TokenType.CARET:
+            return 4;
+        case TokenType.AMP:
+            return 5;
         case TokenType.IS_EQUAL:
         case TokenType.NOT_EQUAL:
-            return 3;
+            return 6;
         case TokenType.LANGLE:
         case TokenType.RANGLE:
         case TokenType.LTE:
         case TokenType.GTE:
-            return 4;
+            return 7;
+        case TokenType.SHL:
+        case TokenType.SHR:
+            return 8;
         case TokenType.PLUS:
         case TokenType.MINUS:
-            return 5;
+            return 9;
         case TokenType.ASTERISK:
         case TokenType.SLASH:
-            return 6;
+            return 10;
         default:
             return 0;
     }

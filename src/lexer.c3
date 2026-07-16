@@ -84,6 +84,10 @@ fn void tokenize(Lexer* lexer, CompileContext* context) {
             make_token(lexer, TokenType.GTE, ">=");
         } else if (lexer.current == '<' && peek(lexer) == '=') {
             make_token(lexer, TokenType.LTE, "<=");
+        } else if (lexer.current == '<' && peek(lexer) == '<') {
+            make_token(lexer, TokenType.SHL, "<<");
+        } else if (lexer.current == '>' && peek(lexer) == '>') {
+            make_token(lexer, TokenType.SHR, ">>");
         } else {
             switch (lexer.current) {
             case ';': make_token(lexer, TokenType.SEMI, ";");
@@ -105,6 +109,9 @@ fn void tokenize(Lexer* lexer, CompileContext* context) {
             case '&': make_token(lexer, TokenType.AMP, "&");
             case '!': make_token(lexer, TokenType.BANG, "!");
             case ':': make_token(lexer, TokenType.COLON, ":");
+            case '|': make_token(lexer, TokenType.PIPE, "|");
+            case '^': make_token(lexer, TokenType.CARET, "^");
+            case '~': make_token(lexer, TokenType.TILDA, "~");
             }
         }
 
@@ -207,29 +214,50 @@ fn void number(Lexer* lexer, CompileContext* context) => @pool() {
 
     Range     start = lexer.range;
     TokenType type  = TokenType.INT;
+    bool      is_hex = false;
 
-    while (lexer.current.is_digit() || lexer.current == '_') {
+    if (lexer.current == '0' && peek(lexer) == 'x') {
+        is_hex = true;
         number.append(lexer.current);
         consume(lexer, column: true);
-    }
-
-    if (lexer.current == '.') {
-        number.append(".");
+        number.append(lexer.current);
         consume(lexer, column: true);
 
-        if (!lexer.current.is_digit()) {
+        if (!lexer.current.is_hex_digit()) {
             Range to = lexer.range;
             to.column++;
 
-            highlighter::error(context, context.current_file, lexer.range, to, "Expected another digit");
+            highlighter::error(context, context.current_file, lexer.range, to, "Expected hex digit after 0x");
         }
 
+        while (lexer.current.is_hex_digit() || lexer.current == '_') {
+            number.append(lexer.current);
+            consume(lexer, column: true);
+        }
+    } else {
         while (lexer.current.is_digit() || lexer.current == '_') {
             number.append(lexer.current);
             consume(lexer, column: true);
         }
 
-        type = TokenType.REAL;
+        if (lexer.current == '.') {
+            number.append(".");
+            consume(lexer, column: true);
+
+            if (!lexer.current.is_digit()) {
+                Range to = lexer.range;
+                to.column++;
+
+                highlighter::error(context, context.current_file, lexer.range, to, "Expected another digit");
+            }
+
+            while (lexer.current.is_digit() || lexer.current == '_') {
+                number.append(lexer.current);
+                consume(lexer, column: true);
+            }
+
+            type = TokenType.REAL;
+        }
     }
 
     lexer.context.tokens.push({

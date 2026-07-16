@@ -61,3 +61,15 @@ bool equals(str a, str b) {
 
     ret true;
 }
+
+/*
+str copy(str s, Allocator alloc) {
+    int   len  = s.len;
+    char* copy = allocator.alloc(alloc, len + 1);
+
+    mem.copy(copy, s.ptr, len);
+
+    // todo add nullterm
+    ret new str(copy, len);
+}
+*/
