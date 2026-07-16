@@ -37,229 +37,6 @@ fn void register_type(Lookup* lookup, Allocator alloc, String name, String filep
     lookup.set(name, type);
 }
 
-fn LLVMTypeRef get_llvm_type(CompileContext* context, Node* node, Scope* scope) {
-    switch (node.type) {
-    case NodeType.TYPE:
-        String type_name   = node.type_node.name.ident_node.name;
-        String type_suffix = node.type_node.suffix;
-
-        TypeInfo*   type_info = get_type_info(context, type_name);
-        LLVMTypeRef llvm_type = type_info.llvm_type;
-
-        while (type_suffix.ends_with("*") || type_suffix.ends_with("[]")) {
-            switch (type_suffix[type_suffix.len - 1]) {
-            case '*':
-                type_suffix = type_suffix[:type_suffix.len - 1];
-                llvm_type   = llvm::pointer_type(llvm_type, 0);
-            case ']':
-                type_suffix = type_suffix[:type_suffix.len - 1];
-                llvm_type   = llvm::slice_type(llvm_type);
-            }
-        }
-
-        if (llvm::get_type_kind(llvm_type) == LLVMTypeKind.STRUCT_TYPE_KIND && llvm::is_opaque_struct(llvm_type)) {
-            List{LLVMTypeRef} llvm_fields;
-            llvm_fields.tinit();
-            
-            foreach (Node* field : type_info.node.struct_node.fields) {
-                llvm_fields.push(get_llvm_type(context, field.parameter_node.type, scope));
-            }
-
-            llvm::struct_set_body(llvm_type, llvm_fields.to_array(context.alloc), (CUInt)llvm_fields.len(), llvm::FALSE);
-        }
-
-        return llvm_type;
-    case NodeType.PARAMETER:
-        return get_llvm_type(context, node.parameter_node.type, scope);
-    case NodeType.VARIABLE:
-        return get_llvm_type(context, node.variable_node.type, scope);
-    case NodeType.REFERENCE:
-        LLVMTypeRef llvm_type = get_llvm_type(context, node.reference_node.node, scope);
-
-        return llvm::pointer_type(llvm_type, 0);
-    case NodeType.IDENT:
-        String name = node.ident_node.name;
-
-        return get_llvm_type(context, scope::get_variable(scope, name).node, scope);
-    case NodeType.DEREFERENCE:
-        return get_pointee_llvm_type(context, node.dereference_node.node, scope);
-    case NodeType.ACCESS:
-        String        name          = node.access_node.name.path_node.path;
-        VariableInfo* variable_info = scope::get_variable(scope, name);
-        String        base_group    = get_base_type_group(context, variable_info.node, scope);
-
-        String type_name = get_type_name(context, variable_info.node, scope);
-
-        if (base_group == "pointer") {
-            type_name = type_name[:type_name.len - 1];
-        }
-
-        TypeInfo* type_info = get_type_info(context, type_name);
-        NodeList  fields     = get_type_fields(context, type_info, scope);
-        String    field_name = node.access_node.next.ident_node.name;
-
-        Node* field_node;
-        foreach (Node* field : fields) {
-            if (field.parameter_node.name.ident_node.name == field_name) {
-                field_node = field;
-                break;
-            }
-        }
-
-        return get_llvm_type(context, field_node.parameter_node.type, scope);
-    case NodeType.BIN:
-        return get_llvm_type(context, node.bin_node.left, scope);
-    case NodeType.INT:
-        return context.lookup.get("int").llvm_type!!;
-    case NodeType.UNARY:
-        switch (node.unary_node.operator.type) {
-        case TokenType.PLUS:
-        case TokenType.MINUS:
-            return get_llvm_type(context, node.unary_node.node, scope);
-        case TokenType.BANG:
-            return context.lookup.get("bool").llvm_type!!;
-        default:
-            highlighter::panic();
-        }
-    case NodeType.BOOL:
-        return context.lookup.get("bool").llvm_type!!;
-    case NodeType.CALL:
-        FunctionInfo* function_info = get_function_info(context, node.call_node.name.path_node.path);
-
-        return get_llvm_type(context, function_info.node, scope);
-    case NodeType.FUNCTION:
-        return get_llvm_type(context, node.function_node.type, scope);
-    case NodeType.EXT:
-        return get_llvm_type(context, node.ext_node.type, scope);
-    default:
-        highlighter::panic("Missing get_llvm_type case for type '%s'", node.type);
-    }
-}
-
-fn LLVMTypeRef get_pointee_llvm_type(CompileContext* context, Node* node, Scope* scope) {
-    Node* inner = node;
-
-    while (inner.type == NodeType.IDENT) {
-        inner = scope::get_variable(scope, inner.ident_node.name).node;
-    }
-
-    if (inner.type == NodeType.VARIABLE) {
-        inner = inner.variable_node.type;
-    } else if (inner.type == NodeType.PARAMETER) {
-        inner = inner.parameter_node.type;
-    } else if (inner.type == NodeType.ACCESS) {
-        String        access_name     = inner.access_node.name.path_node.path;
-        VariableInfo* access_var_info = scope::get_variable(scope, access_name);
-        String        access_group    = get_base_type_group(context, access_var_info.node, scope);
-        String        type_name       = get_type_name(context, access_var_info.node, scope);
-
-        if (access_group == "pointer") {
-            type_name = type_name[:type_name.len - 1];
-        }
-
-        TypeInfo* type_info  = get_type_info(context, type_name);
-        NodeList  fields      = get_type_fields(context, type_info, scope);
-        String    field_name  = inner.access_node.next.ident_node.name;
-
-        foreach (Node* field : fields) {
-            if (field.parameter_node.name.ident_node.name == field_name) {
-                inner = field.parameter_node.type;
-                break;
-            }
-        }
-    } else if (inner.type == NodeType.BIN) {
-        return get_pointee_llvm_type(context, inner.bin_node.left, scope);
-    }
-
-    Node cloned = *inner;
-    cloned.type_node.suffix = cloned.type_node.suffix[:cloned.type_node.suffix.len - 1];
-
-    return get_llvm_type(context, &cloned, scope);
-}
-
-fn LLVMMetadataRef get_llvm_debug_type(CompileContext* context, Generator* generator, Lookup* lookup, Node* node) => @pool() {
-    switch (node.type) {
-    case NodeType.TYPE:
-        String type_name   = node.type_node.name.ident_node.name;
-        String type_suffix = node.type_node.suffix;
-
-        TypeInfo*       type_info       = get_type_info(context, type_name);
-        LLVMTypeRef     llvm_type       = type_info.llvm_type; // lookup.get(type_name).llvm_type!!;
-        LLVMMetadataRef llvm_debug_type = get_llvm_debug_type_from_kind(context, generator, llvm_type, type_info);
-
-        while (type_suffix.ends_with("*") || type_suffix.ends_with("[]")) {
-            switch (type_suffix[type_suffix.len - 1]) {
-            case '*':
-                type_suffix = type_suffix[:type_suffix.len - 1];
-                llvm_type   = llvm::pointer_type(llvm_type, 0);
-                llvm_debug_type = llvm::di_builder_create_pointer_type(generator.llvm_debug_builder, llvm_debug_type, 64, 0, 0, null, 0);
-            case ']':
-                type_suffix     = type_suffix[:type_suffix.len - 1];
-                llvm_type       = llvm::slice_type(llvm_type);
-                llvm_debug_type = llvm::di_builder_create_pointer_type(generator.llvm_debug_builder, llvm_debug_type, 64, 0, 0, null, 0);
-            }
-        }
-
-        return llvm_debug_type;
-    case NodeType.PARAMETER:
-        return get_llvm_debug_type(context, generator, lookup, node.parameter_node.type);
-    default:
-        highlighter::panic("Missing get_llvm_debug_type case for type '%s'", node.type);
-    }
-}
-
-fn LLVMMetadataRef get_llvm_debug_type_from_kind(CompileContext* context, Generator* generator, LLVMTypeRef llvm_type, TypeInfo* type_info) {
-    if (!generator) {
-        return null;
-    }
-
-    switch (llvm::get_type_kind(llvm_type)) {
-    case LLVMTypeKind.VOID_TYPE_KIND:
-        return null;
-    case LLVMTypeKind.INTEGER_TYPE_KIND:
-        CUInt  width = llvm::get_int_type_width(llvm_type);
-        String name  = string::format(context.alloc, "i%d", width);
-
-        if (width == 1) {
-            name.free(context.alloc);
-            name = "bool";
-        }
-
-        return llvm::di_builder_create_basic_type(generator.llvm_debug_builder, (CChar*)name.ptr, (CUInt)name.len, width, 5, LLVMDIFlags.DI_FLAG_ZERO);
-    case LLVMTypeKind.STRUCT_TYPE_KIND:
-        String name = ((ZString)llvm::get_struct_name(llvm_type)).str_view().copy(context.alloc);
-
-        uint size_in_bits = 0;
-        uint align_in_bits = 0;
-
-        List{LLVMMetadataRef} member_types;
-        member_types.init(context.alloc);
-
-        @todo("finish implementing struct members and size + align");
-
-        return llvm::di_builder_create_struct_type(
-            generator.llvm_debug_builder,
-            generator.llvm_debug_file,
-            (CChar*)name.ptr,
-            name.len,
-            generator.llvm_debug_file,
-            (CUInt)type_info.node.range.from.line,
-            size_in_bits,
-            align_in_bits,
-            LLVMDIFlags.DI_FLAG_ZERO,
-            null,
-            member_types.to_array(context.alloc),
-            (CUInt)member_types.len(),
-            0,
-            null,
-            (CChar*)"".ptr,
-            0
-        );
-    default:
-        highlighter::panic("Missing get_llvm_debug_type_from_kind case for type kind '%s'", llvm::get_type_kind(llvm_type));
-    }
-}
-
 fn bool compare_type(CompileContext* context, Node* node, Node* other, Scope* scope) {
     LookupElement node_data  = get(context, node, scope);
     LookupElement other_data = get(context, other, scope);
@@ -279,244 +56,15 @@ fn bool compare_type(CompileContext* context, Node* node, Node* other, Scope* sc
         return true;
     }
 
+    if (node_data.type_group == "integer" && other_data.type_group == "integer") {
+        return true;
+    }
+
     if (node_data.type_name == "any") {
         return true;
     }
 
     return false;
-}
-
-fn String get_type_name(CompileContext* context, Node* node, Scope* scope) {
-    switch (node.type) {
-    case NodeType.PARAMETER:
-        if (node.parameter_node.type) {
-            return get_type_name(context, node.parameter_node.type, scope);
-        }
-
-        return "any";
-    case NodeType.TYPE:
-        String type_name   = node.type_node.name.path_node.path;
-        String type_suffix = node.type_node.suffix;
-
-        return string::format(context.alloc, "%s%s", type_name, type_suffix);
-    case NodeType.INT:
-        return "int";
-    case NodeType.BOOL:
-        return "bool";
-    case NodeType.STRING:
-        return "string";
-    case NodeType.IDENT:
-        String name = node.ident_node.name;
-
-        return get_type_name(context, scope::get_variable(scope, name).node, scope);
-    case NodeType.VARIABLE:
-        return get_type_name(context, node.variable_node.type, scope);
-    case NodeType.FUNCTION:
-        return get_type_name(context, node.function_node.type, scope);
-    case NodeType.BIN:
-        switch (node.bin_node.operator.type) {
-        case TokenType.IS_EQUAL:
-        case TokenType.NOT_EQUAL:
-        case TokenType.GTE:
-        case TokenType.LTE:
-        case TokenType.LANGLE:
-        case TokenType.RANGLE:
-            return "bool";
-        default:
-            return get_type_name(context, node.bin_node.left, scope);
-        }
-    case NodeType.UNARY:
-        switch (node.unary_node.operator.type) {
-        case TokenType.PLUS:
-        case TokenType.MINUS:
-            return get_type_name(context, node.unary_node.node, scope);
-        case TokenType.BANG:
-            return "bool";
-        default:
-            highlighter::panic();
-        }
-    case NodeType.CALL:
-        String        name           = node.call_node.name.ident_node.name;
-        FunctionInfo* function_info  = get_function_info(context, name);
-        String        type_name      = get_type_name(context, function_info.node, scope);
-
-        return type_name.contains(".") ? type_name : string::tformat("%s.%s", function_info.mod, type_name);
-    case NodeType.ACCESS:
-        Node*  path = node.access_node.name;
-        String name = path.path_node.path;
-
-        bool module_found = false;
-
-        foreach (String mod : scope::get_imports(context.alloc, scope)) {
-            if (mod == name ||
-                mod.starts_with(string::tformat("%s.", name)) ||
-                mod.ends_with(string::tformat(".%s", name))) {
-                module_found = true;
-                break;
-            }
-        }
-
-        if (module_found) {
-            return traverse_access_module(context, node, scope);
-        } else {
-            return traverse_access_variable(context, node, scope);
-        }
-    case NodeType.INIT:
-        return node.init_node.name.path_node.path;
-    case NodeType.NULL:
-        return "null";
-    case NodeType.RET:
-        if (node.ret_node.value) {
-            return get_type_name(context, node.ret_node.value, scope);
-        }
-
-        return "void";
-    case NodeType.REFERENCE:
-        return string::format(context.alloc, "%s*", get_type_name(context, node.reference_node.node, scope));
-    case NodeType.DEREFERENCE:
-        String type_name = get_type_name(context, node.dereference_node.node, scope);
-
-        return type_name[:type_name.len - 1];
-    case NodeType.REAL:
-        return "real";
-    case NodeType.EXT:
-        return get_type_name(context, node.ext_node.type, scope);
-    default:
-        highlighter::panic("Missing get_type_name case for type '%s'", node.type);
-    }
-}
-
-fn String get_base_type_group(CompileContext* context, Node* node, Scope* scope) {
-    switch (node.type) {
-    case NodeType.PARAMETER:
-        if (node.parameter_node.type) {
-            return get_base_type_group(context, node.parameter_node.type, scope);
-        }
-
-        return "anytype";
-    case NodeType.TYPE:
-        String       type_name      = node.type_node.name.ident_node.name;
-        LLVMTypeRef  llvm_type      = get_llvm_type(context, node, scope);
-        LLVMTypeKind llvm_type_kind = llvm::get_type_kind(llvm_type);
-
-        switch (llvm_type_kind) {
-        case LLVMTypeKind.INTEGER_TYPE_KIND:
-            CUInt width = llvm::get_int_type_width(llvm_type);
-
-            if (width == 1) {
-                return "boolean";
-            }
-        
-            return "integer";
-        case LLVMTypeKind.POINTER_TYPE_KIND:
-            return "pointer";
-        case LLVMTypeKind.STRUCT_TYPE_KIND:
-            return "struct";
-        case LLVMTypeKind.DOUBLE_TYPE_KIND:
-            return "real";
-        default:
-            highlighter::panic("Missing get_base_type_group#TYPE case for type kind '%s'", llvm_type_kind);
-        }
-    case NodeType.INT:
-        return "integer";
-    case NodeType.BOOL:
-        return "boolean";
-    case NodeType.STRING:
-        return "pointer";
-    case NodeType.IDENT:
-        String name = node.ident_node.name;
-
-        return get_base_type_group(context, scope::get_variable(scope, name).node, scope);
-    case NodeType.VARIABLE:
-        return get_base_type_group(context, node.variable_node.type, scope);
-    case NodeType.RET:
-        if (node.ret_node.value) {
-            return get_base_type_group(context, node.ret_node.value, scope);
-        }
-
-        return "void";
-    case NodeType.BIN:
-        switch (node.bin_node.operator.type) {
-        case TokenType.IS_EQUAL:
-        case TokenType.NOT_EQUAL:
-        case TokenType.GTE:
-        case TokenType.LTE:
-        case TokenType.LANGLE:
-        case TokenType.RANGLE:
-            return "boolean";
-        default:
-            return get_base_type_group(context, node.bin_node.left, scope);
-        }
-    case NodeType.UNARY:
-        switch (node.unary_node.operator.type) {
-        case TokenType.PLUS:
-        case TokenType.MINUS:
-            return get_base_type_group(context, node.unary_node.node, scope);
-        case TokenType.BANG:
-            return "boolean";
-        default:
-            highlighter::panic();
-        }
-    case NodeType.CALL:
-        String        name          = node.call_node.name.ident_node.name;
-        FunctionInfo* function_info = get_function_info(context, name);
-
-        return get_base_type_group(context, function_info.node, scope);
-    case NodeType.FUNCTION:
-        return get_base_type_group(context, node.function_node.type, scope);
-    case NodeType.ACCESS:
-        Node*  path = node.access_node.name;
-        String name = path.path_node.path;
-
-        bool module_found = false;
-
-        foreach (String mod : scope::get_imports(context.alloc, scope)) {
-            if (mod == name ||
-                mod.starts_with(string::tformat("%s.", name)) ||
-                mod.ends_with(string::tformat(".%s", name))) {
-                module_found = true;
-                break;
-            }
-        }
-
-        if (module_found) {
-            return traverse_access_module_base_group(context, node, scope);
-        } else {
-            return traverse_access_variable_base_group(context, node, scope);
-        }
-    case NodeType.INIT:
-        return node.init_node.name.path_node.path;
-    case NodeType.NULL:
-        return "pointer";
-    case NodeType.REFERENCE:
-        return "pointer";
-    case NodeType.DEREFERENCE:
-        LLVMTypeRef  pointee_llvm_type = get_pointee_llvm_type(context, node.dereference_node.node, scope);
-        LLVMTypeKind pointee_type_kind = llvm::get_type_kind(pointee_llvm_type);
-
-        switch (pointee_type_kind) {
-        case LLVMTypeKind.INTEGER_TYPE_KIND:
-            CUInt width = llvm::get_int_type_width(pointee_llvm_type);
-
-            if (width == 1) {
-                return "boolean";
-            }
-
-            return "integer";
-        case LLVMTypeKind.POINTER_TYPE_KIND:
-            return "pointer";
-        case LLVMTypeKind.STRUCT_TYPE_KIND:
-            return "struct";
-        default:
-            highlighter::panic("Missing get_base_type_group#DEREFERENCE case for type kind '%s'", pointee_type_kind);
-        }
-    case NodeType.REAL:
-        return "real";
-    case NodeType.EXT:
-        return get_base_type_group(context, node.ext_node.type, scope);
-    default:
-        highlighter::panic("Missing get_base_type_group case for type '%s'", node.type);
-    }
 }
 
 fn NodeList get_type_fields(CompileContext* context, TypeInfo* type_info, Scope* scope) {
@@ -526,242 +74,6 @@ fn NodeList get_type_fields(CompileContext* context, TypeInfo* type_info, Scope*
     default:
         highlighter::panic();
     }
-}
-
-fn String traverse_access_variable(CompileContext* context, Node* node, Scope* scope) => @pool() {
-    String        name          = node.access_node.name.path_node.path;
-    VariableInfo* variable_info = scope::get_variable(scope, name);
-    String        base_group    = get_base_type_group(context, variable_info.node, scope);
-
-    String type_name = get_type_name(context, variable_info.node, scope);
-
-    if (base_group == "pointer") {
-        type_name = type_name[:type_name.len - 1];
-    }
-
-    TypeInfo* type_info = get_type_info(context, type_name);
-
-    return traverse_access_field(context, node, scope, type_info);
-}
-
-fn String traverse_access_field(CompileContext* context, Node* node, Scope* scope, TypeInfo* type_info) => @pool() {
-    String name = node.access_node.name.path_node.path;
-
-    switch (node.access_node.next.type) {
-    case NodeType.IDENT:
-        break;
-    default:
-        highlighter::panic("traverse_access_field#access");
-    }
-
-    String   field_name = node.access_node.next.ident_node.name;
-    NodeList fields     = lookup::get_type_fields(context, type_info, scope);
-    String   field_type = lookup::get_type_name(context, node.access_node.name, scope);
-
-    Node* field_node;
-    foreach (Node* field : fields) {
-        if (field.parameter_node.name.ident_node.name == field_name) {
-            field_node = field;
-            break;
-        }
-    }
-
-    return get_type_name(context, field_node, scope);
-}
-
-fn String traverse_access_module(CompileContext* context, Node* node, Scope* scope) => @pool() {
-    DString full_name;
-    full_name.tinit();
-
-    String function_name;
-
-    Node* next = node;
-    while (next) {
-        switch (next.type) {
-        case NodeType.ACCESS:
-            full_name.append(next.access_node.name.ident_node.name);
-            full_name.append(".");
-
-            next = next.access_node.next;
-        case NodeType.CALL:
-            full_name.append(next.call_node.name.ident_node.name);
-            function_name = next.call_node.name.ident_node.name;
-
-            next = null;
-        default:
-            highlighter::panic();
-        }
-    }
-
-    String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
-
-    String resolved_module;
-    bool   found = false;
-
-    for (Scope* s = scope; s && !found; s = s.parent) {
-        foreach (String mod : s.imports) {
-            if (mod == short_module_name || mod.ends_with(string::tformat(".%s", short_module_name))) {
-                resolved_module = mod;
-                found = true;
-                break;
-            }
-        }
-    }
-
-    if (!found) {
-        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", short_module_name);
-    }
-
-    DString resolved_full_name;
-    resolved_full_name.tinit();
-    resolved_full_name.append(resolved_module);
-    resolved_full_name.append(".");
-    resolved_full_name.append(function_name);
-
-    next = node;
-    while (next) {
-        switch (next.type) {
-        case NodeType.ACCESS:
-            next = next.access_node.next;
-        case NodeType.CALL:
-            FunctionInfo* function_info = get_function_info(context, resolved_full_name.str_view());
-            Node*         type_node;
-
-            switch (function_info.node.type) {
-            case NodeType.EXT:
-                type_node = function_info.node.ext_node.type;
-            case NodeType.FUNCTION:
-                type_node = function_info.node.function_node.type;
-            default:
-                highlighter::panic();
-            }
-
-            String type_name = get_type_name(context, type_node, scope);
-
-            return type_name.contains(".") ? type_name : string::format(context.alloc, "%s.%s", resolved_module, type_name);
-        default:
-            highlighter::panic();
-        }
-    }
-
-    highlighter::panic();
-}
-
-fn String traverse_access_variable_base_group(CompileContext* context, Node* node, Scope* scope) => @pool() {
-    String        name          = node.access_node.name.path_node.path;
-    VariableInfo* variable_info = scope::get_variable(scope, name);
-    String        base_group    = lookup::get_base_type_group(context, variable_info.node, scope);
-
-    String type_name = lookup::get_type_name(context, variable_info.node, scope);
-
-    if (base_group == "pointer") {
-        type_name = type_name[:type_name.len - 1];
-    }
-
-    TypeInfo* type_info = get_type_info(context, type_name);
-
-    return traverse_access_field_base_group(context, node, scope, type_info);
-}
-
-fn String traverse_access_field_base_group(CompileContext* context, Node* node, Scope* scope, TypeInfo* type_info) => @pool() {
-    String name = node.access_node.name.path_node.path;
-
-    switch (node.access_node.next.type) {
-    case NodeType.IDENT:
-        break;
-    default:
-        highlighter::panic("traverse_access_field#access");
-    }
-
-    String   field_name = node.access_node.next.ident_node.name;
-    NodeList fields     = lookup::get_type_fields(context, type_info, scope);
-    String   field_type = lookup::get_type_name(context, node.access_node.name, scope);
-
-    Node* field_node;
-    foreach (Node* field : fields) {
-        if (field.parameter_node.name.ident_node.name == field_name) {
-            field_node = field;
-            break;
-        }
-    }
-
-    return get_base_type_group(context, field_node, scope);
-}
-
-fn String traverse_access_module_base_group(CompileContext* context, Node* node, Scope* scope) => @pool() {
-    DString full_name;
-    full_name.tinit();
-
-    String function_name;
-
-    Node* next = node;
-    while (next) {
-        switch (next.type) {
-        case NodeType.ACCESS:
-            full_name.append(next.access_node.name.ident_node.name);
-            full_name.append(".");
-
-            next = next.access_node.next;
-        case NodeType.CALL:
-            full_name.append(next.call_node.name.ident_node.name);
-            function_name = next.call_node.name.ident_node.name;
-
-            next = null;
-        default:
-            highlighter::panic();
-        }
-    }
-
-    String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
-
-    String resolved_module;
-    bool   found = false;
-
-    for (Scope* s = scope; s && !found; s = s.parent) {
-        foreach (String mod : s.imports) {
-            if (mod == short_module_name || mod.ends_with(string::tformat(".%s", short_module_name))) {
-                resolved_module = mod;
-                found = true;
-                break;
-            }
-        }
-    }
-
-    if (!found) {
-        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find module '%s', did you forget to import it?", short_module_name);
-    }
-
-    DString resolved_full_name;
-    resolved_full_name.tinit();
-    resolved_full_name.append(resolved_module);
-    resolved_full_name.append(".");
-    resolved_full_name.append(function_name);
-
-    next = node;
-    while (next) {
-        switch (next.type) {
-        case NodeType.ACCESS:
-            next = next.access_node.next;
-        case NodeType.CALL:
-            FunctionInfo* function_info = get_function_info(context, resolved_full_name.str_view());
-            Node*         type_node;
-
-            switch (function_info.node.type) {
-            case NodeType.EXT:
-                type_node = function_info.node.ext_node.type;
-            case NodeType.FUNCTION:
-                type_node = function_info.node.function_node.type;
-            default:
-                highlighter::panic();
-            }
-
-            return get_base_type_group(context, type_node, scope);
-        default:
-            highlighter::panic();
-        }
-    }
-
-    highlighter::panic();
 }
 
 fn TypeInfo* get_type_info(CompileContext* context, String name) {
@@ -800,6 +112,7 @@ fn FunctionInfo* get_function_info(CompileContext* context, String name) {
     return context.registry.functions.get(qualified_name) ?? null;
 }
 
+// potentially remove type_group alltogether
 fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generator* generator = null) {
     switch (node.type) {
     case NodeType.FUNCTION:
@@ -810,24 +123,18 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
 
         TypeInfo*       type_info       = get_type_info(context, name);
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
-        LLVMMetadataRef llvm_debug_type = get_llvm_debug_type_from_kind(context, generator, llvm_type, type_info);
+        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
 
         while (type_suffix.ends_with("*") || type_suffix.ends_with("[]")) {
             switch (type_suffix[type_suffix.len - 1]) {
             case '*':
                 type_suffix = type_suffix[:type_suffix.len - 1];
                 llvm_type   = llvm::pointer_type(llvm_type, 0);
-
-                if (generator) {
-                    llvm_debug_type = llvm::di_builder_create_pointer_type(generator.llvm_debug_builder, llvm_debug_type, 64, 0, 0, null, 0);
-                }
+                llvm_debug_type = create_debug_type(context, generator, llvm_type, null, llvm_debug_type);
             case ']':
                 type_suffix = type_suffix[:type_suffix.len - 1];
                 llvm_type   = llvm::slice_type(llvm_type);
-                
-                if (generator) {
-                    llvm_debug_type = llvm::di_builder_create_pointer_type(generator.llvm_debug_builder, llvm_debug_type, 64, 0, 0, null, 0);
-                }
+                llvm_debug_type = create_debug_type(context, generator, llvm_type, null, llvm_debug_type);
             }
         }
 
@@ -836,7 +143,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         if (llvm::get_type_kind(llvm_type) == LLVMTypeKind.STRUCT_TYPE_KIND && llvm::is_opaque_struct(llvm_type)) {
             List{LLVMTypeRef} llvm_fields;
             llvm_fields.tinit();
-            
+
             foreach (Node* field : type_info.node.struct_node.fields) {
                 llvm_fields.push(get(context, field.parameter_node.type, scope).llvm_type);
             }
@@ -846,7 +153,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
 
         String type_name  = string::format(context.alloc, "%s%s", name, node.type_node.suffix);
         String type_group = node.type_node.suffix.ends_with("*") ? "pointer" : "";
-        
+
         switch (llvm_type_kind) {
         case LLVMTypeKind.INTEGER_TYPE_KIND:
             CUInt width = llvm::get_int_type_width(llvm_type);
@@ -854,7 +161,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             if (width == 1) {
                 type_group = "boolean";
             }
-        
+
             type_group = "integer";
         }
 
@@ -883,26 +190,22 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         case TokenType.LANGLE:
         case TokenType.RANGLE:
             // bool
-            TypeInfo*   type_info = get_type_info(context, "bool");
-            uint        width     = llvm::get_int_type_width(type_info.llvm_type);
-
-            LLVMTypeRef llvm_type       = type_info.llvm_type;
-            LLVMTypeRef llvm_debug_type = generator ? llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "bool", 4, width, 5, LLVMDIFlags.DI_FLAG_ZERO) : null;
-            String      type_name       = "bool";
-            String      type_group      = "boolean";
+            TypeInfo*       type_info       = get_type_info(context, "bool");
+            LLVMTypeRef     llvm_type       = type_info.llvm_type;
+            LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
+            String          type_name       = "bool";
+            String          type_group      = "boolean";
 
             return { llvm_type, llvm_debug_type, type_name, type_group };
         default:
             return get(context, node.bin_node.left, scope);
         }
     case NodeType.INT:
-        TypeInfo*   type_info = get_type_info(context, "int");
-        uint        width     = llvm::get_int_type_width(type_info.llvm_type);
-
-        LLVMTypeRef llvm_type       = type_info.llvm_type;
-        LLVMTypeRef llvm_debug_type = generator ? llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "int", 3, width, 5, LLVMDIFlags.DI_FLAG_ZERO) : null;
-        String      type_name       = "int";
-        String      type_group      = "integer";
+        TypeInfo*       type_info       = get_type_info(context, "int");
+        LLVMTypeRef     llvm_type       = type_info.llvm_type;
+        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
+        String          type_name       = "int";
+        String          type_group      = "integer";
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
     case NodeType.ACCESS:
@@ -961,12 +264,11 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
 
         return get(context, field_node.parameter_node.type, scope);
     case NodeType.STRING:
-        TypeInfo*   type_info = get_type_info(context, "String");
-
-        LLVMTypeRef llvm_type       = type_info.llvm_type;
-        LLVMTypeRef llvm_debug_type = generator ? llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "string", 6, 32, 5, LLVMDIFlags.DI_FLAG_ZERO) : null;
-        String      type_name       = "string";
-        String      type_group      = "pointer";
+        TypeInfo*       type_info       = get_type_info(context, "String");
+        LLVMTypeRef     llvm_type       = type_info.llvm_type;
+        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
+        String          type_name       = "string";
+        String          type_group      = "pointer";
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
     case NodeType.RET:
@@ -974,10 +276,9 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             return get(context, node.ret_node.value, scope);
         }
 
-        TypeInfo* type_info = get_type_info(context, "void");
-
+        TypeInfo*       type_info       = get_type_info(context, "void");
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
-        LLVMMetadataRef llvm_debug_type = generator ? llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "void", 4, 32, 5, LLVMDIFlags.DI_FLAG_ZERO) : null;
+        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
         String          type_name       = "void";
         String          type_group      = "void";
 
@@ -985,16 +286,15 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
     case NodeType.NULL:
         // change `null` to pointertype later
         LLVMTypeRef     llvm_type       = null;
-        LLVMMetadataRef llvm_debug_type = generator ? llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "null", 4, 32, 5, LLVMDIFlags.DI_FLAG_ZERO) : null;
+        LLVMMetadataRef llvm_debug_type = generator ? llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "null", 4, 64, 5, LLVMDIFlags.DI_FLAG_ZERO) : null;
         String          type_name       = "null";
         String          type_group      = "pointer";
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
     case NodeType.BOOL:
-        TypeInfo* type_info = get_type_info(context, "bool");
-
+        TypeInfo*       type_info       = get_type_info(context, "bool");
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
-        LLVMMetadataRef llvm_debug_type = generator ? llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "bool", 4, 1, 5, LLVMDIFlags.DI_FLAG_ZERO) : null;
+        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
         String          type_name       = "bool";
         String          type_group      = "boolean";
 
@@ -1004,13 +304,74 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
 
         return get(context, type_info.node, scope);
     case NodeType.STRUCT:
-        String    name      = node.type_node.name.ident_node.name;
-        TypeInfo* type_info = get_type_info(context, name);
-
+        String          name            = node.type_node.name.ident_node.name;
+        TypeInfo*       type_info       = get_type_info(context, name);
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
-        LLVMMetadataRef llvm_debug_type = null; // construct debug type
+        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
         String          type_name       = name;
         String          type_group      = "struct";
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.DEREFERENCE:
+        LookupElement type_data = get(context, node.dereference_node.node, scope);
+
+        LLVMTypeKind pointee_type_kind = llvm::get_type_kind(type_data.llvm_type);
+
+        switch (pointee_type_kind) {
+        case LLVMTypeKind.INTEGER_TYPE_KIND:
+            CUInt width = llvm::get_int_type_width(type_data.llvm_type);
+
+            if (width == 1) {
+                TypeInfo*       type_info       = get_type_info(context, "bool");
+                LLVMTypeRef     llvm_type       = type_info.llvm_type;
+                LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
+                String          type_name       = "bool";
+                String          type_group      = "boolean";
+
+                return { llvm_type, llvm_debug_type, type_name, type_group };
+            }
+
+            TypeInfo*       type_info       = get_type_info(context, "int");
+            LLVMTypeRef     llvm_type       = type_info.llvm_type;
+            LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
+            String          type_name       = "int";
+            String          type_group      = "integer";
+
+            return { llvm_type, llvm_debug_type, type_name, type_group };
+        case LLVMTypeKind.POINTER_TYPE_KIND:
+            String    new_type_name = type_data.type_name[:type_data.type_name.len - 1];
+            TypeInfo* type_info     = get_type_info(context, new_type_name);
+
+            LLVMTypeRef     llvm_type       = type_info.llvm_type;
+            LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
+            String          type_name       = new_type_name;
+            String          type_group;
+
+            switch (llvm::get_type_kind(llvm_type)) {
+            case LLVMTypeKind.INTEGER_TYPE_KIND:
+                type_group = llvm::get_int_type_width(llvm_type) == 1 ? "boolean" : "integer";
+            case LLVMTypeKind.POINTER_TYPE_KIND:
+                type_group = "pointer";
+            case LLVMTypeKind.STRUCT_TYPE_KIND:
+                type_group = "struct";
+            default:
+                highlighter::panic();
+            }
+
+            return { llvm_type, llvm_debug_type, type_name, type_group };
+        case LLVMTypeKind.STRUCT_TYPE_KIND:
+            io::printn("struct");
+            highlighter::panic();
+        default:
+            highlighter::panic("Missing get_base_type_group#DEREFERENCE case for type kind '%s'", pointee_type_kind);
+        }
+    case NodeType.REFERENCE:
+        LookupElement type_data = get(context, node.reference_node.node, scope);
+
+        LLVMTypeRef     llvm_type       = llvm::pointer_type(type_data.llvm_type, 0);
+        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, null, type_data.llvm_debug_type);
+        String          type_name       = string::format(context.alloc, "%s*", type_data.type_name);
+        String          type_group      = "pointer";
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
     default:
@@ -1018,10 +379,60 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
     }
 }
 
-/*
-struct LookupElement {
-    LLVMTypeRef     llvm_type;
-    LLVMMetadataRef llvm_debug_type;
-    String          type_name;
-    String          type_group;
+fn LLVMMetadataRef create_debug_type(CompileContext* context, Generator* generator, LLVMTypeRef llvm_type, TypeInfo* type_info = null, LLVMMetadataRef pointee_debug_type = null) {
+    if (!generator || !generator.llvm_debug_builder) {
+        return null;
+    }
+
+    switch (llvm::get_type_kind(llvm_type)) {
+    case LLVMTypeKind.VOID_TYPE_KIND:
+        return null;
+    case LLVMTypeKind.INTEGER_TYPE_KIND:
+        CUInt  width = llvm::get_int_type_width(llvm_type);
+        String name  = string::format(context.alloc, "i%d", width);
+
+        if (width == 1) {
+            name.free(context.alloc);
+            name = "bool";
+        }
+
+        io::printn(name);
+        io::printn(width);
+        io::printn(generator.llvm_debug_builder);
+
+        return llvm::di_builder_create_basic_type(generator.llvm_debug_builder, (CChar*)name.ptr, (CUInt)name.len, width, 5, LLVMDIFlags.DI_FLAG_ZERO);
+    case LLVMTypeKind.STRUCT_TYPE_KIND:
+        String name = ((ZString)llvm::get_struct_name(llvm_type)).str_view().copy(context.alloc);
+
+        uint size_in_bits  = 0;
+        uint align_in_bits = 0;
+
+        List{LLVMMetadataRef} member_types;
+        member_types.init(context.alloc);
+
+        @todo("finish implementing struct members and size + align");
+
+        return llvm::di_builder_create_struct_type(
+            generator.llvm_debug_builder,
+            generator.llvm_debug_file,
+            (CChar*)name.ptr,
+            name.len,
+            generator.llvm_debug_file,
+            type_info ? (CUInt)type_info.node.range.from.line : 0,
+            size_in_bits,
+            align_in_bits,
+            LLVMDIFlags.DI_FLAG_ZERO,
+            null,
+            member_types.to_array(context.alloc),
+            (CUInt)member_types.len(),
+            0,
+            null,
+            (CChar*)"".ptr,
+            0
+        );
+    case LLVMTypeKind.POINTER_TYPE_KIND:
+        return llvm::di_builder_create_pointer_type(generator.llvm_debug_builder, pointee_debug_type, 64, 0, 0, null, 0);
+    default:
+        highlighter::panic("Missing create_debug_type case for type kind '%s'", llvm::get_type_kind(llvm_type));
+    }
 }

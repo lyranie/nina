@@ -69,7 +69,7 @@ fn void _register_functions(CompileContext* context, Node* node) {
             highlighter::error(context, context.current_file, node.function_node.type.range.from, node.function_node.type.range.to, "Could not find type '%s'", node.function_node.type.type_node.name.path_node.path);
         }
 
-        LLVMTypeRef return_type = lookup::get_llvm_type(context, node.function_node.type, null);
+        LLVMTypeRef return_type = lookup::get(context, node.function_node.type, null).llvm_type;
     
         List{LLVMTypeRef} parameters;
         parameters.tinit();
@@ -84,7 +84,7 @@ fn void _register_functions(CompileContext* context, Node* node) {
                 highlighter::error(context, context.current_file, parameter.range.from, parameter.range.to, "Unnamed parameters are not allowed");
             }
 
-            LLVMTypeRef llvm_parameter_type = lookup::get_llvm_type(context, parameter, null);
+            LLVMTypeRef llvm_parameter_type = lookup::get(context, parameter, null).llvm_type;
             parameters.push(llvm_parameter_type);
         }
 
@@ -116,7 +116,7 @@ fn void _register_functions(CompileContext* context, Node* node) {
             highlighter::error(context, context.current_file, node.ext_node.type.range.from, node.ext_node.type.range.to, "Could not find type '%s'", node.ext_node.type.type_node.name.path_node.path);
         }
     
-        LLVMTypeRef return_type = lookup::get_llvm_type(context, node.function_node.type, null);
+        LLVMTypeRef return_type = lookup::get(context, node.function_node.type, null).llvm_type;
 
         List{LLVMTypeRef} parameters;
         parameters.tinit();
@@ -138,7 +138,7 @@ fn void _register_functions(CompileContext* context, Node* node) {
                 highlighter::error(context, context.current_file, parameter.range.from, parameter.range.to, "Unnamed parameters are not allowed");
             }
 
-            LLVMTypeRef llvm_parameter_type = lookup::get_llvm_type(context, parameter, null);
+            LLVMTypeRef llvm_parameter_type = lookup::get(context, parameter, null).llvm_type;
             parameters.push(llvm_parameter_type);
         }
         

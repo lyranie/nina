@@ -271,8 +271,8 @@ fn void analyse_variable(Analyser* analyser, CompileContext* context, Node* node
         // get actual type infos and compare qualified names
 
         if (!lookup::compare_type(context, node, node.variable_node.value, analyser.scope)) {
-            String variable_type = lookup::get_type_name(context, node, analyser.scope);
-            String value_type    = lookup::get_type_name(context, node.variable_node.value, analyser.scope);
+            String variable_type = lookup::get(context, node, analyser.scope).type_name;
+            String value_type    = lookup::get(context, node.variable_node.value, analyser.scope).type_name;
 
             highlighter::error(context, context.current_file, node.variable_node.value.range.from, node.variable_node.value.range.to, "Expected type '%s', got '%s'", variable_type, value_type);
         }
@@ -346,8 +346,9 @@ fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) 
 }
 
 fn void analyse_unary(Analyser* analyser, CompileContext* context, Node* node) {
-    String group = lookup::get_base_type_group(context, node, analyser.scope);
-    String type  = lookup::get_type_name(context, node, analyser.scope);
+    LookupElement type_data = lookup::get(context, node, analyser.scope);
+    String        type      = type_data.type_name;
+    String        group     = type_data.type_group;
 
     switch (node.unary_node.operator.type) {
     case TokenType.PLUS:
@@ -367,7 +368,7 @@ fn void analyse_unary(Analyser* analyser, CompileContext* context, Node* node) {
 fn void analyse_if(Analyser* analyser, CompileContext* context, Node* node, void* data) {
     analyse_node(analyser, context, node.if_node.condition);
 
-    switch (lookup::get_base_type_group(context, node.if_node.condition, analyser.scope)) {
+    switch (lookup::get(context, node.if_node.condition, analyser.scope).type_group) {
     case "pointer":
     case "boolean":
         break;
@@ -453,8 +454,8 @@ fn void analyse_init(Analyser* analyser, CompileContext* context, Node* node) {
         analyse_node(analyser, context, argument);
 
         if (!lookup::compare_type(context, field, argument, analyser.scope)) {
-            String field_type    = lookup::get_type_name(context, field, analyser.scope);
-            String argument_type = lookup::get_type_name(context, argument, analyser.scope);
+            String field_type    = lookup::get(context, field, analyser.scope).type_name;
+            String argument_type = lookup::get(context, argument, analyser.scope).type_name;
 
             highlighter::error(context, context.current_file, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", field_type, argument_type);
         }
@@ -468,15 +469,15 @@ fn void analyse_reference(Analyser* analyser, CompileContext* context, Node* nod
 fn void analyse_dereference(Analyser* analyser, CompileContext* context, Node* node) {
     analyse_node(analyser, context, node.reference_node.node);
 
-    if (lookup::get_base_type_group(context, node.dereference_node.node, analyser.scope) != "pointer") {
-        String type_name = lookup::get_type_name(context, node, analyser.scope);
+    if (lookup::get(context, node.dereference_node.node, analyser.scope).type_group != "pointer") {
+        String type_name = lookup::get(context, node, analyser.scope).type_name;
 
         highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot dereference value of type '%s'", type_name);
     }
 }
 
 fn void analyse_suffix(Analyser* analyser, CompileContext* context, Node* node) {
-    String base_group = lookup::get_base_type_group(context, node.suffix_node.node, analyser.scope);
+    String base_group = lookup::get(context, node.suffix_node.node, analyser.scope).type_group;
 
     switch (node.suffix_node.operator.type) {
     case TokenType.PLUS:
@@ -498,8 +499,8 @@ fn void analyse_assign(Analyser* analyser, CompileContext* context, Node* node) 
     analyse_node(analyser, context, node.assign_node.expr, null);
 
     if (!lookup::compare_type(context, node.assign_node.node, node.assign_node.expr, analyser.scope)) {
-        String target_type = lookup::get_type_name(context, node.assign_node.node, analyser.scope);
-        String expr_type    = lookup::get_type_name(context, node.assign_node.expr, analyser.scope);
+        String target_type = lookup::get(context, node.assign_node.node, analyser.scope).type_name;
+        String expr_type   = lookup::get(context, node.assign_node.expr, analyser.scope).type_name;
 
         highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot assign type '%s' to type '%s'", expr_type, target_type);
     }
@@ -584,13 +585,14 @@ fn void traverse_access_module(Analyser* analyser, CompileContext* context, Node
 fn void traverse_access_variable(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
     String        name          = node.access_node.name.path_node.path;
     VariableInfo* variable_info = scope::get_variable(analyser.scope, name);
-    String        base_group    = lookup::get_base_type_group(context, variable_info.node, analyser.scope);
+    LookupElement type_data     = lookup::get(context, variable_info.node, analyser.scope);
+
+    String base_group = type_data.type_group;
+    String type_name  = type_data.type_name;
 
     if (base_group != "struct" && base_group != "pointer") {
         highlighter::panic("type group is %s", base_group);
     }
-
-    String type_name = lookup::get_type_name(context, variable_info.node, analyser.scope);
 
     if (base_group == "pointer") {
         type_name = type_name[:type_name.len - 1];
@@ -613,7 +615,7 @@ fn void traverse_access_field(Analyser* analyser, CompileContext* context, Node*
 
     String   field_name = node.access_node.next.ident_node.name;
     NodeList fields     = lookup::get_type_fields(context, type_info, analyser.scope);
-    String   field_type = lookup::get_type_name(context, node.access_node.name, analyser.scope);
+    String   field_type = lookup::get(context, node.access_node.name, analyser.scope).type_name;
 
     Node* field_node;
     foreach (Node* field : fields) {
