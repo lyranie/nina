@@ -538,41 +538,81 @@ fn LLVMValueRef generate_access(Generator* generator, CompileContext* context, N
     // -- variable access --
     String        variable_name = node.access_node.name.path_node.path;
     VariableInfo* variable_info = scope::get_variable(generator.scope, variable_name);
-    LookupElement type_data     = lookup::get(context, variable_info.node, generator.scope, generator);
+    LookupElement base          = lookup::get(context, variable_info.node, generator.scope, generator);
 
-    String base_group = type_data.type_group;
-    String type_name  = type_data.type_name;
-
-    if (base_group == "pointer") {
-        type_name = type_name[:type_name.len - 1];
-    }
-
-    TypeInfo*    type_info    = lookup::get_type_info(context, type_name);
     LLVMValueRef instance_ptr = variable_info.llvm_value;
+    LLVMValueRef current_value;
 
-    if (base_group == "pointer") {
-        LLVMTypeRef ptr_llvm_type = type_data.llvm_type;
+    Node* next = node.access_node.next;
 
-        instance_ptr = llvm::build_load_2(generator.llvm_builder, ptr_llvm_type, instance_ptr, "");
-    }
+    while (next) {
+        String field_name;
+        Node*  after;
 
-    String   field_name = node.access_node.next.ident_node.name;
-    NodeList fields      = lookup::get_type_fields(context, type_info, generator.scope);
-
-    uint  field_index = 0;
-    Node* field_node;
-    foreach (uint i, Node* field : fields) {
-        if (field.parameter_node.name.ident_node.name == field_name) {
-            field_index = i;
-            field_node = field;
-            break;
+        switch (next.type) {
+        case NodeType.IDENT:
+            field_name = next.ident_node.name;
+            after      = null;
+        case NodeType.ACCESS:
+            field_name = next.access_node.name.ident_node.name;
+            after      = next.access_node.next;
+        default:
+            highlighter::panic("nested access unhandled");
         }
+
+        if (field_name.starts_with("$")) {
+            current_value = get_reflection_value(generator, context, base, field_name);
+
+            if (after) {
+                base = { .type_name = "int", .type_group = "integer" };
+            } else {
+                return current_value;
+            }
+
+            next = after;
+            continue;
+        }
+
+        String base_group = base.type_group;
+        String type_name  = base.type_name;
+
+        if (base_group == "pointer") {
+            type_name = type_name[:type_name.len - 1];
+
+            instance_ptr = llvm::build_load_2(generator.llvm_builder, base.llvm_type, instance_ptr, "");
+        }
+
+        TypeInfo* type_info = lookup::get_type_info(context, type_name);
+        NodeList  fields     = lookup::get_type_fields(context, type_info, generator.scope);
+
+        uint  field_index = 0;
+        Node* field_node;
+        foreach (uint i, Node* field : fields) {
+            if (field.parameter_node.name.ident_node.name == field_name) {
+                field_index = i;
+                field_node  = field;
+                break;
+            }
+        }
+
+        if (!field_node) {
+            highlighter::panic("Could not find field '%s' on type '%s'", field_name, type_name);
+        }
+
+        LookupElement field_element = lookup::get(context, field_node, generator.scope, generator);
+        LLVMValueRef  field_ptr     = llvm::build_struct_gep2(generator.llvm_builder, type_info.llvm_type, instance_ptr, field_index, "");
+
+        if (after) {
+            instance_ptr = field_ptr;
+            base         = field_element;
+        } else {
+            return llvm::build_load_2(generator.llvm_builder, field_element.llvm_type, field_ptr, "");
+        }
+
+        next = after;
     }
 
-    LLVMTypeRef  field_llvm_type = lookup::get(context, field_node, generator.scope, generator).llvm_type;
-    LLVMValueRef field_ptr       = llvm::build_struct_gep2(generator.llvm_builder, type_info.llvm_type, instance_ptr, field_index, "");
-
-    return llvm::build_load_2(generator.llvm_builder, field_llvm_type, field_ptr, "");
+    highlighter::panic("Unreachable");
 }
 
 fn LLVMValueRef generate_unary(Generator* generator, CompileContext* context, Node* node) {
@@ -964,6 +1004,25 @@ fn LLVMValueRef get_or_declare_function(Generator* generator, CompileContext* co
 
 fn LLVMValueRef create_int(LLVMTypeRef int_type, int value) {
     return llvm::const_int(int_type, (CULongLong)value, llvm::TRUE);
+}
+
+fn LLVMValueRef get_reflection_value(Generator* generator, CompileContext* context, LookupElement base, String field_name) {
+    switch (field_name) {
+    case "$size":
+        int size = lookup::get_type_size(context, generator.scope, base);
+
+        return create_int(lookup::get_type_info(context, "int").llvm_type, (ulong)size);
+    case "$typeid":
+        int type_id = 5381;
+
+        foreach (char c : base.type_name) {
+            type_id = ((type_id << 5) + type_id) + c;
+        }
+
+        return create_int(lookup::get_type_info(context, "int").llvm_type, (ulong)type_id);
+    default:
+        highlighter::panic("'%s' unhandled", field_name);
+    }
 }
 
 fn void emit(Generator* generator, CompileContext* context) {

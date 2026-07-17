@@ -21,3 +21,13 @@ void printnb(bool b) {
         libc.printf("false\n");
     }
 }
+
+/*
+void printn<T>(T value) {
+    switch (value.$typeid) {
+    case str.$type:
+        libc.printf("%s\n", x.ptr);
+    case int.$type:
+        libc.printf("%d\n", x);
+    }
+}

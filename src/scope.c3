@@ -25,6 +25,7 @@ fn void add_variable(Scope* scope, Allocator alloc, String name, Node* node, LLV
 
     variable.name       = name;
     variable.node       = node;
+    variable.used       = false;
     variable.llvm_type  = llvm_type;
     variable.llvm_value = llvm_value;
 

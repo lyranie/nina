@@ -252,12 +252,18 @@ fn void analyse_ident(Analyser* analyser, CompileContext* context, Node* node) {
     if (!scope::has_variable(analyser.scope, name)) {
         highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find variable '%s'", name);
     }
+
+    scope::get_variable(analyser.scope, name).used = true;
 }
 
 fn void analyse_variable(Analyser* analyser, CompileContext* context, Node* node) {
     analyse_node(analyser, context, node.variable_node.type);
 
     String name = node.variable_node.name.ident_node.name;
+
+    if (name.starts_with("$")) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Variable names may not start with '$'");
+    }
 
     if (scope::has_variable(analyser.scope, name)) {
         VariableInfo* prev = scope::get_variable(analyser.scope, name);
@@ -303,6 +309,14 @@ fn void analyse_compound(Analyser* analyser, CompileContext* context, NodeList s
             highlighter::note(context, context.current_file, statement.range.from, statement.range.to, "No statement will be executed after return");
         }
     }
+
+    @todo("add usage module that tracks all usages per module and optimizes them away in codegen");
+
+    analyser.scope.variables.@each(; String name, VariableInfo* info) {
+        if (!info.used) {
+            highlighter::warn(context, context.current_file, info.node.range.from, info.node.range.to, "Unused variable '%s'", name);
+        }
+    };
 }
 
 fn void analyse_use(Analyser* analyser, CompileContext* context, Node* node) {
@@ -390,45 +404,43 @@ fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) 
         highlighter::error(context, context.current_file, path.range.from, path.range.to, "Could not find '%s'", name);
     }
 
+    scope::get_variable(analyser.scope, name).used = true;
+
     // -- variable access --
     VariableInfo* variable_info = scope::get_variable(analyser.scope, name);
-    LookupElement type_data     = lookup::get(context, variable_info.node, analyser.scope);
+    LookupElement base          = lookup::get(context, variable_info.node, analyser.scope);
 
-    String base_group = type_data.type_group;
-    String type_name  = type_data.type_name;
+    Node* next = node.access_node.next;
 
-    if (base_group != "struct" && base_group != "pointer") {
-        highlighter::panic("type group is %s", base_group);
-    }
+    while (next) {
+        String field_name;
+        Node*  after;
 
-    if (base_group == "pointer") {
-        type_name = type_name[:type_name.len - 1];
-    }
-
-    TypeInfo* type_info = lookup::get_type_info(context, type_name);
-
-    switch (node.access_node.next.type) {
-    case NodeType.IDENT:
-        break;
-    default:
-        highlighter::panic();
-    }
-
-    String   field_name = node.access_node.next.ident_node.name;
-    NodeList fields     = lookup::get_type_fields(context, type_info, analyser.scope);
-    String   field_type = lookup::get(context, node.access_node.name, analyser.scope).type_name;
-
-    Node* field_node;
-    foreach (Node* field : fields) {
-        if (field.parameter_node.name.ident_node.name == field_name) {
-            field_node = field;
-            break;
+        switch (next.type) {
+        case NodeType.IDENT:
+            field_name = next.ident_node.name;
+            after      = null;
+        case NodeType.ACCESS:
+            field_name = next.access_node.name.ident_node.name;
+            after      = next.access_node.next;
+        default:
+            highlighter::panic("nested access unhandled");
         }
+
+        FieldResult result = lookup::get_field(context, analyser.scope, base, field_name);
+
+        if (result.field_node) {
+            base = lookup::get(context, result.field_node, analyser.scope);
+        } else if (result.lookup_element.type_name != "") {
+            base = result.lookup_element;
+        } else {
+            highlighter::error(context, context.current_file, next.range.from, next.range.to, "Could not find field '%s' on type '%s'", field_name, base.type_name);
+        }
+
+        next = after;
     }
 
-    if (!field_node) {
-        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find field '%s' on type '%s'", field_name, field_type);
-    }
+    // check ct fields
 }
 
 fn void analyse_unary(Analyser* analyser, CompileContext* context, Node* node) {

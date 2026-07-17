@@ -335,6 +335,7 @@ struct FunctionInfo {
 struct VariableInfo {
     String       name;
     Node*        node;
+    bool         used;
     LLVMTypeRef  llvm_type;
     LLVMValueRef llvm_value;
 }
@@ -365,6 +366,11 @@ struct Type {
     String      filepath;
     Node*       node;
     LLVMTypeRef llvm_type;
+}
+
+union FieldResult {
+    Node*         field_node;
+    LookupElement lookup_element;
 }
 
 struct Generator {

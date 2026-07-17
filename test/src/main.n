@@ -5,15 +5,30 @@ use std.io;
 
 use libc;
 
+type Foo(Bar b);
+type Bar(char* s);
+
 int main() {
     str name = string.create("Allie");
 
-    io.printns(name);
-    io.printni(string.index_of(name, 'i'));
-    io.printni(string.index_of_char(name.ptr, 'i'));
-    io.printnb(string.equals(name, string.create("Allie")));
-    io.printnb(string.equals(name, string.create("Allies")));
-    io.printnb(string.equals(name, string.create("Allue")));
+    io.printni(name.$size);
+    io.printni(name.$size.$typeid);
 
+    Foo f = new Foo(new Bar("test"));
+
+    libc.printf("%s\n", f.b.s);
+
+    str s;
+    libc.printf("%d\n", s.ptr.$size);
+
+    // not yet implemented in parser
+    // libc.printf("%d\n", test().$size);
+
+    int i;
+
+    ret 0;
+}
+
+int test() {
     ret 0;
 }

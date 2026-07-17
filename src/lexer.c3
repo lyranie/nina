@@ -62,7 +62,7 @@ fn void tokenize(Lexer* lexer, CompileContext* context) {
             line_comment(lexer);
         } else if (lexer.current == '/' && peek(lexer) == '*') {
             block_comment(lexer);
-        } else if (lexer.current.is_alpha() || lexer.current == '_') {
+        } else if (lexer.current.is_alpha() || lexer.current == '_' || lexer.current == '$') {
             word(lexer, context);
         } else if (lexer.current.is_digit()) {
             number(lexer, context);
@@ -173,7 +173,7 @@ fn void word(Lexer* lexer, CompileContext* context) => @pool() {
 
     Range start = lexer.range;
 
-    while (lexer.current.is_alnum() || lexer.current == '_') {
+    while (lexer.current.is_alnum() || lexer.current == '_' || lexer.current == '$') {
         word.append(lexer.current);
         consume(lexer, column: true);
     }
