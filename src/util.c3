@@ -103,6 +103,22 @@ fn bool try_get_typeid_narrowing(Node* condition, String* out_var, String* out_t
     return true;
 }
 
+fn bool try_get_typeid_narrowing_switch(Node* subject, Node* case_expr, String* out_var, String* out_type) {
+    String var_name;
+    if (!is_ident_typeid_access(subject, &var_name)) {
+        return false;
+    }
+
+    String type_name;
+    if (!is_type_typeid_access(case_expr, &type_name)) {
+        return false;
+    }
+
+    *out_var  = var_name;
+    *out_type = type_name;
+    return true;
+}
+
 fn bool is_ident_typeid_access(Node* node, String* out_var) {
     if (node.type != NodeType.ACCESS) {
         return false;

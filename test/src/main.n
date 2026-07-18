@@ -6,10 +6,15 @@ use std.io;
 type Foo();
 
 int main() {
+    long a = 1;
+
     io.printn(1);
     io.printn(true);
     io.printn(string.create("Test"));
     io.printn(new Foo());
+    io.printn(a);
+    io.printn('o');
+    io.printn(1.1);
 
     ret 0;
 }

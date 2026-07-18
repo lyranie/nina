@@ -180,21 +180,25 @@ fn void word(Lexer* lexer, CompileContext* context) => @pool() {
 
     TokenType type;
     switch (word.str_view()) {
-    case "mod":   type = TokenType.KW_MOD;
-    case "ret":   type = TokenType.KW_RET;
-    case "ext":   type = TokenType.KW_EXT;
-    case "true":  type = TokenType.TRUE;
-    case "false": type = TokenType.FALSE;
-    case "use":   type = TokenType.KW_USE;
-    case "if":    type = TokenType.KW_IF;
-    case "else":  type = TokenType.KW_ELSE;
-    case "type":  type = TokenType.KW_TYPE;
-    case "new":   type = TokenType.KW_NEW;
-    case "null":  type = TokenType.NULL;
-    case "while": type = TokenType.KW_WHILE;
-    case "base":  type = TokenType.KW_BASE;
-    case "as":    type = TokenType.KW_AS;
-    default:      type = TokenType.IDENT;
+    case "mod":     type = TokenType.KW_MOD;
+    case "ret":     type = TokenType.KW_RET;
+    case "ext":     type = TokenType.KW_EXT;
+    case "true":    type = TokenType.TRUE;
+    case "false":   type = TokenType.FALSE;
+    case "use":     type = TokenType.KW_USE;
+    case "if":      type = TokenType.KW_IF;
+    case "else":    type = TokenType.KW_ELSE;
+    case "type":    type = TokenType.KW_TYPE;
+    case "new":     type = TokenType.KW_NEW;
+    case "null":    type = TokenType.NULL;
+    case "while":   type = TokenType.KW_WHILE;
+    case "base":    type = TokenType.KW_BASE;
+    case "as":      type = TokenType.KW_AS;
+    case "switch":  type = TokenType.KW_SWITCH;
+    case "case":    type = TokenType.KW_CASE;
+    case "default": type = TokenType.KW_DEFAULT;
+    case "break":   type = TokenType.KW_BREAK;
+    default:        type = TokenType.IDENT;
     }
 
     lexer.context.tokens.push({

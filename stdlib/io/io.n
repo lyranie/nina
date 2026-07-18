@@ -3,20 +3,37 @@ mod std.io;
 use std.core.string;
 use libc;
 
-void printn(any a) {
-    if (a.$typeid == str.$typeid) {
+void print(any a) {
+    switch (a.$typeid) {
+    case str.$typeid:
         libc.printf("%s", a.$data.ptr);
-    } else if (a.$typeid == int.$typeid) {
+        break;
+    case int.$typeid:
         libc.printf("%d", a.$data);
-    } else if (a.$typeid == bool.$typeid) {
+        break;
+    case bool.$typeid:
         if (a.$data) {
             libc.printf("true");
         } else {
             libc.printf("false");
         }
-    } else {
+        break;
+    case real.$typeid:
+        libc.printf("%.2f", a.$data);
+        break;
+    case char.$typeid:
+        libc.printf("%c", a.$data);
+        break;
+    case long.$typeid:
+        libc.printf("%d", a.$data);
+        break;
+    default:
         libc.printf("<UNKNOWN>");
+        break;
     }
+}
 
+void printn(any a) {
+    print(a);
     libc.printf("\n");
 }

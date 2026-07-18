@@ -99,6 +99,10 @@ enum TokenType {
     KW_WHILE,
     KW_BASE,
     KW_AS,
+    KW_SWITCH,
+    KW_CASE,
+    KW_DEFAULT,
+    KW_BREAK,
 
     SEMI,
     LPAREN,
@@ -269,6 +273,17 @@ struct Node {
             Node* node;
             Node* type;
         }
+        struct switch_node {
+            Node*    expr;
+            NodeList cases;
+        }
+        struct case_node {
+            Node*    expr;
+            NodeList statements;
+        }
+        struct default_node {
+            NodeList statements;
+        }
     }
 }
 
@@ -303,6 +318,10 @@ enum NodeType {
     REAL,
     CHAR,
     CAST,
+    SWITCH,
+    CASE,
+    DEFAULT,
+    BREAK,
 }
 
 struct FunctionSignature {
@@ -381,12 +400,13 @@ union FieldResult {
 }
 
 struct Generator {
-    String           module_name;
-    Scope*           scope;
-    LLVMModuleRef    llvm_module;
-    LLVMBuilderRef   llvm_builder;
-    LLVMDIBuilderRef llvm_debug_builder;
-    LLVMMetadataRef  llvm_debug_file;
+    String                  module_name;
+    Scope*                  scope;
+    LLVMModuleRef           llvm_module;
+    LLVMBuilderRef          llvm_builder;
+    LLVMDIBuilderRef        llvm_debug_builder;
+    LLVMMetadataRef         llvm_debug_file;
+    List{LLVMBasicBlockRef} break_targets;
 }
 
 struct Linker {

@@ -59,6 +59,8 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
     case NodeType.WHILE:       analyse_while(analyser, context, node, data);
     case NodeType.REAL:        break;
     case NodeType.CHAR:        break;
+    case NodeType.SWITCH:      analyse_switch(analyser, context, node, data);
+    case NodeType.BREAK:       break;
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -692,6 +694,63 @@ fn void analyse_while(Analyser* analyser, CompileContext* context, Node* node, v
     analyser.scope = scope::create(context.alloc, analyser.scope);
     analyse_compound(analyser, context, node.while_node.statements, data);
     analyser.scope = analyser.scope.parent;
+}
+
+fn void analyse_switch(Analyser* analyser, CompileContext* context, Node* node, void* data) {
+    analyse_node(analyser, context, node.switch_node.expr);
+
+    foreach (Node* case_node : node.switch_node.cases) {
+        switch (case_node.type) {
+        case NodeType.CASE:
+            analyse_node(analyser, context, case_node.case_node.expr);
+
+            if (!lookup::compare_type(context, node.switch_node.expr, case_node.case_node.expr, analyser.scope)) {
+                String subject_type = lookup::get(context, node.switch_node.expr, analyser.scope).type_name;
+                String case_type    = lookup::get(context, case_node.case_node.expr, analyser.scope).type_name;
+
+                highlighter::error(context, context.current_file, case_node.case_node.expr.range.from, case_node.case_node.expr.range.to, "Expected type '%s', got '%s'", subject_type, case_type);
+            }
+
+            analyser.scope = scope::create(context.alloc, analyser.scope);
+
+            String narrowed_var;
+            String narrowed_type;
+            if (util::try_get_typeid_narrowing_switch(node.switch_node.expr, case_node.case_node.expr, &narrowed_var, &narrowed_type)) {
+                TypeInfo*   type_info = lookup::get_type_info(context, narrowed_type);
+                LLVMTypeRef llvm_type = type_info.llvm_type;
+                String      type_group;
+
+                switch (llvm::get_type_kind(llvm_type)) {
+                case LLVMTypeKind.INTEGER_TYPE_KIND:
+                    type_group = llvm::get_int_type_width(llvm_type) == 1 ? "boolean" : "integer";
+                case LLVMTypeKind.POINTER_TYPE_KIND:
+                    type_group = "pointer";
+                case LLVMTypeKind.STRUCT_TYPE_KIND:
+                    type_group = "struct";
+                case LLVMTypeKind.DOUBLE_TYPE_KIND:
+                    type_group = "real";
+                default:
+                    highlighter::panic();
+                }
+
+                scope::add_narrowed_type(analyser.scope, narrowed_var, {
+                    .llvm_type  = llvm_type,
+                    .type_name  = type_info.name,
+                    .type_group = type_group
+                });
+            }
+
+            analyse_compound(analyser, context, case_node.case_node.statements, data);
+
+            analyser.scope = analyser.scope.parent;
+        case NodeType.DEFAULT:
+            analyser.scope = scope::create(context.alloc, analyser.scope);
+            analyse_compound(analyser, context, case_node.default_node.statements, data);
+            analyser.scope = analyser.scope.parent;
+        default:
+            highlighter::panic();
+        }
+    }
 }
 
 fn bool always_returns(Analyser* analyser, CompileContext* context, Node* node) {

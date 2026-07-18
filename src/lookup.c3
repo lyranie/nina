@@ -555,6 +555,8 @@ fn LLVMMetadataRef create_debug_type(CompileContext* context, Generator* generat
         );
     case LLVMTypeKind.POINTER_TYPE_KIND:
         return llvm::di_builder_create_pointer_type(generator.llvm_debug_builder, pointee_debug_type, 64, 0, 0, null, 0);
+    case LLVMTypeKind.DOUBLE_TYPE_KIND:
+        return llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "real", 4, 64, 5, LLVMDIFlags.DI_FLAG_ZERO);
     default:
         highlighter::panic("Missing create_debug_type case for type kind '%s'", llvm::get_type_kind(llvm_type));
     }

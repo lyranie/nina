@@ -192,20 +192,26 @@ fn NodeList parse_compound(Parser* parser, CompileContext* context, Lexer* lexer
     consume(parser, context, lexer, TokenType.LBRACE);
     
     while (parser.current.type != TokenType.RBRACE) {
-        switch (parser.current.type) {
-        case TokenType.KW_RET:   statements.push(parse_ret(parser, context, lexer));
-        case TokenType.IDENT:    statements.push(parse_identifier_statement(parser, context, lexer));
-        case TokenType.KW_IF:    statements.push(parse_if(parser, context, lexer));
-        case TokenType.ASTERISK: statements.push(parse_assign_or_expr_statement(parser, context, lexer));
-        case TokenType.KW_WHILE: statements.push(parse_while(parser, context, lexer));
-        default:
-            highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
-        }
+        statements.push(parse_compound_statement(parser, context, lexer));
     }
 
     consume(parser, context, lexer, TokenType.RBRACE);
 
     return statements;
+}
+
+fn Node* parse_compound_statement(Parser* parser, CompileContext* context, Lexer* lexer) {
+    switch (parser.current.type) {
+        case TokenType.KW_RET:    return parse_ret(parser, context, lexer);
+        case TokenType.IDENT:     return parse_identifier_statement(parser, context, lexer);
+        case TokenType.KW_IF:     return parse_if(parser, context, lexer);
+        case TokenType.ASTERISK:  return parse_assign_or_expr_statement(parser, context, lexer);
+        case TokenType.KW_WHILE:  return parse_while(parser, context, lexer);
+        case TokenType.KW_SWITCH: return parse_switch(parser, context, lexer);
+        case TokenType.KW_BREAK:  return parse_break(parser, context, lexer);
+        default:
+            highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
+        }
 }
 
 fn Node* parse_ret(Parser* parser, CompileContext* context, Lexer* lexer) {
@@ -783,6 +789,94 @@ fn Node* parse_char(Parser* parser, CompileContext* context, Lexer* lexer) {
     return @make_node(context, NodeType.CHAR, start, end; node) {
         node.char_node.character = character;
     };
+}
+
+fn Node* parse_switch(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.KW_SWITCH);
+    consume(parser, context, lexer, TokenType.LPAREN);
+
+    Node* expr = parse_expr(parser, context, lexer);
+
+    consume(parser, context, lexer, TokenType.RPAREN);
+    consume(parser, context, lexer, TokenType.LBRACE);
+
+    NodeList cases;
+    cases.init(context.alloc);
+
+    while (parser.current.type == TokenType.KW_CASE ||
+           parser.current.type == TokenType.KW_DEFAULT) {
+        switch (parser.current.type) {
+        case TokenType.KW_CASE:
+            Range case_start = parser.current.range.start;
+
+            consume(parser, context, lexer, TokenType.KW_CASE);
+
+            Node* case_expr = parse_expr(parser, context, lexer);
+
+            consume(parser, context, lexer, TokenType.COLON);
+
+            NodeList case_statements;
+            case_statements.init(context.alloc);
+
+            while (parser.current.type != TokenType.KW_CASE    &&
+                   parser.current.type != TokenType.KW_DEFAULT &&
+                   parser.current.type != TokenType.RBRACE) {
+                case_statements.push(parse_compound_statement(parser, context, lexer));
+            }
+
+            Range case_end = peek(parser, lexer, -1).range.end;
+
+            cases.push(@make_node(context, NodeType.CASE, case_start, case_end; node) {
+                node.case_node.expr       = case_expr;
+                node.case_node.statements = case_statements;
+            });
+        case TokenType.KW_DEFAULT:
+            Range default_start = parser.current.range.start;
+
+            consume(parser, context, lexer, TokenType.KW_DEFAULT);
+            consume(parser, context, lexer, TokenType.COLON);
+
+            NodeList default_statements;
+            default_statements.init(context.alloc);
+
+            while (parser.current.type != TokenType.KW_CASE    &&
+                   parser.current.type != TokenType.KW_DEFAULT &&
+                   parser.current.type != TokenType.RBRACE) {
+                default_statements.push(parse_compound_statement(parser, context, lexer));
+            }
+
+            Range default_end = peek(parser, lexer, -1).range.end;
+
+            cases.push(@make_node(context, NodeType.DEFAULT, default_start, default_end; node) {
+                node.default_node.statements = default_statements;
+            });
+        default:
+            highlighter::panic();
+        }
+        // TODO:
+    }
+
+    consume(parser, context, lexer, TokenType.RBRACE);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.SWITCH, start, end; node) {
+        node.switch_node.expr  = expr;
+        node.switch_node.cases = cases;
+    };
+}
+
+fn Node* parse_break(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.KW_BREAK);
+    consume(parser, context, lexer, TokenType.SEMI);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.BREAK, start, end; node) {};
 }
 
 fn void consume(Parser* parser, CompileContext* context, Lexer* lexer, TokenType type) {
