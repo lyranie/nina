@@ -179,6 +179,36 @@ fn StringList get_imports(Allocator alloc, Scope* scope) {
     return imports;
 }
 
+// -- NARROWED TYPE --
+
+fn void add_narrowed_type(Scope* scope, String name, LookupElement element) {
+    scope.narrowed_types.set(name, element);
+}
+
+fn bool has_narrowed_type(Scope* scope, String name) {
+    if (scope.narrowed_types.has_key(name)) {
+        return true;
+    }
+
+    if (scope.parent) {
+        return has_narrowed_type(scope.parent, name);
+    }
+
+    return false;
+}
+
+fn LookupElement get_narrowed_type(Scope* scope, String name) {
+    if (scope.narrowed_types.has_key(name)) {
+        return scope.narrowed_types.get(name)!!;
+    }
+
+    if (scope.parent) {
+        return get_narrowed_type(scope.parent, name);
+    }
+
+    return {};
+}
+
 fn void free(Scope* scope) {
     if (scope == null) {
         return;

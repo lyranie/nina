@@ -10,7 +10,7 @@ import std::io;
 import std::os;
 import std::collections::list;
 
-fn Lookup* create(Allocator alloc) {
+fn Lookup* create(Allocator alloc, LLVMContextRef llvm_context) {
     Lookup* lookup = alloc::new(alloc, Lookup);
 
     lookup.init(alloc);
@@ -22,6 +22,11 @@ fn Lookup* create(Allocator alloc) {
     register_type(lookup, alloc, "real",   "<builtin>", null, llvm::double_type());
     register_type(lookup, alloc, "void",   "<builtin>", null, llvm::void_type());
     register_type(lookup, alloc, "String", "<builtin>", null, llvm::slice_type(llvm::int_8_type()));
+
+    LLVMTypeRef any_type = llvm::struct_create_named(llvm_context, "any");
+    llvm::struct_set_body(any_type, (LLVMTypeRef[]){ llvm::pointer_type(llvm::int_8_type(), 0), llvm::int_32_type() }, 2, llvm::FALSE);
+
+    register_type(lookup, alloc, "any", "<builtin>", null, any_type);
 
     return lookup;
 }
@@ -193,7 +198,6 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         case TokenType.LTE:
         case TokenType.LANGLE:
         case TokenType.RANGLE:
-            // bool
             TypeInfo*       type_info       = get_type_info(context, "bool");
             LLVMTypeRef     llvm_type       = type_info.llvm_type;
             LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
@@ -213,9 +217,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
     case NodeType.ACCESS:
-        // check if module instead of variable
-        String        name          = node.access_node.name.path_node.path;
-        VariableInfo* variable_info = scope::get_variable(scope, name);
+        String name = node.access_node.name.path_node.path;
 
         if (scope::has_import(scope, name)) {
             DString full_name;
@@ -245,41 +247,84 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             }
 
             highlighter::panic();
-        }
+        } else if (scope::has_variable(scope, name)) {
+            VariableInfo* variable_info = scope::get_variable(scope, name);
 
-        LookupElement base = get(context, variable_info.node, scope, generator);
-
-        Node* next = node.access_node.next;
-
-        while (next) {
-            String field_name;
-            Node*  after;
-
-            switch (next.type) {
-            case NodeType.IDENT:
-                field_name = next.ident_node.name;
-                after      = null;
-            case NodeType.ACCESS:
-                field_name = next.access_node.name.ident_node.name;
-                after      = next.access_node.next;
-            default:
-                highlighter::panic("nested access unhandled");
-            }
-
-            FieldResult result = get_field(context, scope, base, field_name);
-
-            if (result.field_node) {
-                base = get(context, result.field_node.parameter_node.type, scope, generator);
-            } else if (result.lookup_element.type_name != "") {
-                base = result.lookup_element;
+            LookupElement base;
+            if (scope::has_narrowed_type(scope, name)) {
+                base = scope::get_narrowed_type(scope, name);
             } else {
-                highlighter::panic("Could not find field '%s' on type '%s'", field_name, base.type_name);
+                base = get(context, variable_info.node, scope, generator);
             }
 
-            next = after;
-        }
+            Node* next = node.access_node.next;
 
-        return base;
+            while (next) {
+                String field_name;
+                Node*  after;
+
+                switch (next.type) {
+                case NodeType.IDENT:
+                    field_name = next.ident_node.name;
+                    after      = null;
+                case NodeType.ACCESS:
+                    field_name = next.access_node.name.ident_node.name;
+                    after      = next.access_node.next;
+                default:
+                    highlighter::panic();
+                }
+
+                FieldResult result = get_field(context, scope, base, field_name);
+
+                if (result.field_node) {
+                    base = get(context, result.field_node.parameter_node.type, scope, generator);
+                } else if (result.lookup_element.type_name != "") {
+                    base = result.lookup_element;
+                } else {
+                    highlighter::panic("Could not find field '%s' on type '%s'", field_name, base.type_name);
+                }
+
+                next = after;
+            }
+
+            return base;
+        } else {
+            TypeInfo* type_info = get_type_info(context, name);
+
+            LookupElement base = { .llvm_type = type_info.llvm_type, .type_name = type_info.name };
+
+            Node* next = node.access_node.next;
+
+            while (next) {
+                String field_name;
+                Node*  after;
+
+                switch (next.type) {
+                case NodeType.IDENT:
+                    field_name = next.ident_node.name;
+                    after      = null;
+                case NodeType.ACCESS:
+                    field_name = next.access_node.name.ident_node.name;
+                    after      = next.access_node.next;
+                default:
+                    highlighter::panic();
+                }
+
+                FieldResult result = get_field(context, scope, base, field_name);
+
+                if (result.field_node) {
+                    base = get(context, result.field_node.parameter_node.type, scope, generator);
+                } else if (result.lookup_element.type_name != "") {
+                    base = result.lookup_element;
+                } else {
+                    highlighter::panic("Could not find field '%s' on type '%s'", field_name, base.type_name);
+                }
+
+                next = after;
+            }
+
+            return base;
+        }
     case NodeType.STRING:
         TypeInfo*       type_info       = get_type_info(context, "String");
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
@@ -301,7 +346,6 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
     case NodeType.NULL:
-        // change `null` to pointertype later
         LLVMTypeRef     llvm_type       = llvm::pointer_type(llvm::int_8_type(), 0);
         LLVMMetadataRef llvm_debug_type = generator ? llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "null", 4, 64, 5, LLVMDIFlags.DI_FLAG_ZERO) : null;
         String          type_name       = "null";
@@ -394,7 +438,6 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
     case NodeType.UNARY:
         switch (node.unary_node.operator.type) {
         case TokenType.BANG:
-            // bool
             TypeInfo*       type_info       = get_type_info(context, "bool");
             LLVMTypeRef     llvm_type       = type_info.llvm_type;
             LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
@@ -447,13 +490,50 @@ fn LLVMMetadataRef create_debug_type(CompileContext* context, Generator* generat
     case LLVMTypeKind.STRUCT_TYPE_KIND:
         String name = ((ZString)llvm::get_struct_name(llvm_type)).str_view().copy(context.alloc);
 
-        uint size_in_bits  = 0;
-        uint align_in_bits = 0;
+        CUInt field_count = llvm::count_struct_element_types(llvm_type);
 
         List{LLVMMetadataRef} member_types;
         member_types.init(context.alloc);
 
-        @todo("finish implementing struct members and size + align");
+        uint offset_in_bits = 0;
+        uint size_in_bits    = 0;
+        uint align_in_bits   = 0;
+
+        for (CUInt i = 0; i < field_count; i++) {
+            LLVMTypeRef field_llvm_type = llvm::struct_get_type_at_index(llvm_type, i);
+            LLVMMetadataRef field_debug_type = create_debug_type(context, generator, field_llvm_type);
+
+            uint field_size_bits;
+            switch (llvm::get_type_kind(field_llvm_type)) {
+            case LLVMTypeKind.INTEGER_TYPE_KIND:
+                field_size_bits = llvm::get_int_type_width(field_llvm_type);
+            case LLVMTypeKind.POINTER_TYPE_KIND:
+                field_size_bits = 64;
+            default:
+                field_size_bits = 64;
+            }
+
+            LLVMMetadataRef member = llvm::di_builder_create_member_type(
+                generator.llvm_debug_builder,
+                null,
+                (CChar*)"".ptr, 0,
+                generator.llvm_debug_file,
+                0,
+                field_size_bits,
+                field_size_bits,
+                offset_in_bits,
+                LLVMDIFlags.DI_FLAG_ZERO,
+                field_debug_type
+            );
+
+            member_types.push(member);
+
+            offset_in_bits += field_size_bits;
+            size_in_bits    += field_size_bits;
+            if (field_size_bits > align_in_bits) {
+                align_in_bits = field_size_bits;
+            }
+        }
 
         return llvm::di_builder_create_struct_type(
             generator.llvm_debug_builder,
@@ -461,7 +541,7 @@ fn LLVMMetadataRef create_debug_type(CompileContext* context, Generator* generat
             (CChar*)name.ptr,
             name.len,
             generator.llvm_debug_file,
-            type_info ? (CUInt)type_info.node.range.from.line : 0,
+            type_info && type_info.node ? (CUInt)type_info.node.range.from.line : 0,
             size_in_bits,
             align_in_bits,
             LLVMDIFlags.DI_FLAG_ZERO,
@@ -486,6 +566,8 @@ fn FieldResult get_field(CompileContext* context, Scope* scope, LookupElement ba
         case "$size":
         case "$typeid":
             return { .lookup_element = { .type_name = "int", .type_group = "integer" } };
+        case "$data":
+            return { .lookup_element = base, .field_node = null };
         default:
             return {};
         }
@@ -522,6 +604,18 @@ fn int get_type_size(CompileContext* context, Scope* scope, LookupElement elemen
     case "boolean":
         return 1;
     case "struct":
+        TypeInfo* type_info = get_type_info(context, element.type_name);
+        NodeList  fields    = get_type_fields(context, type_info, scope);
+
+        int size;
+        foreach (Node* field : fields) {
+            LookupElement field_element = get(context, field, scope);
+            size += get_type_size(context, scope, field_element);
+        }
+
+        return size;
+    case "":
+        // hack for now until i figure out how to get the type group from TypeInfo
         TypeInfo* type_info = get_type_info(context, element.type_name);
         NodeList  fields    = get_type_fields(context, type_info, scope);
 

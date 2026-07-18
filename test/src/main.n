@@ -3,32 +3,13 @@ mod test.main;
 use std.core.string;
 use std.io;
 
-use libc;
-
-type Foo(Bar b);
-type Bar(char* s);
+type Foo();
 
 int main() {
-    str name = string.create("Allie");
+    io.printn(1);
+    io.printn(true);
+    io.printn(string.create("Test"));
+    io.printn(new Foo());
 
-    io.printni(name.$size);
-    io.printni(name.$size.$typeid);
-
-    Foo f = new Foo(new Bar("test"));
-
-    libc.printf("%s\n", f.b.s);
-
-    str s;
-    libc.printf("%d\n", s.ptr.$size);
-
-    // not yet implemented in parser
-    // libc.printf("%d\n", test().$size);
-
-    int i;
-
-    ret 0;
-}
-
-int test() {
     ret 0;
 }

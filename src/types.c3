@@ -98,6 +98,7 @@ enum TokenType {
     KW_NEW,
     KW_WHILE,
     KW_BASE,
+    KW_AS,
 
     SEMI,
     LPAREN,
@@ -264,6 +265,10 @@ struct Node {
         struct char_node {
             String character;
         }
+        struct cast_node {
+            Node* node;
+            Node* type;
+        }
     }
 }
 
@@ -297,6 +302,7 @@ enum NodeType {
     BASE,
     REAL,
     CHAR,
+    CAST,
 }
 
 struct FunctionSignature {
@@ -322,6 +328,7 @@ struct Scope {
     HashMap{String, VariableInfo*} variables;
     HashMap{String, TypeInfo*}     types;
     List{String}                   imports;
+    HashMap{String, LookupElement} narrowed_types;
 }
 
 struct FunctionInfo {

@@ -193,6 +193,7 @@ fn void word(Lexer* lexer, CompileContext* context) => @pool() {
     case "null":  type = TokenType.NULL;
     case "while": type = TokenType.KW_WHILE;
     case "base":  type = TokenType.KW_BASE;
+    case "as":    type = TokenType.KW_AS;
     default:      type = TokenType.IDENT;
     }
 

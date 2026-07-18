@@ -3,31 +3,20 @@ mod std.io;
 use std.core.string;
 use libc;
 
-// TODO: turn into macro or add parameter type checking
-// NOTE: maybe allow function name overloading for different type + parameter configurations \
-// mangle name e.g. `@std.io.printn+<hash>` where hash is a bernstein hash of all type names appended
-void printns(str s) {
-    libc.printf("%s\n", s.ptr);
-}
-
-void printni(int i) {
-    libc.printf("%d\n", i);
-}
-
-void printnb(bool b) {
-    if (b) {
-        libc.printf("true\n");
+void printn(any a) {
+    if (a.$typeid == str.$typeid) {
+        libc.printf("%s", a.$data.ptr);
+    } else if (a.$typeid == int.$typeid) {
+        libc.printf("%d", a.$data);
+    } else if (a.$typeid == bool.$typeid) {
+        if (a.$data) {
+            libc.printf("true");
+        } else {
+            libc.printf("false");
+        }
     } else {
-        libc.printf("false\n");
+        libc.printf("<UNKNOWN>");
     }
-}
 
-/*
-void printn<T>(T value) {
-    switch (value.$typeid) {
-    case str.$type:
-        libc.printf("%s\n", x.ptr);
-    case int.$type:
-        libc.printf("%d\n", x);
-    }
+    libc.printf("\n");
 }

@@ -32,8 +32,8 @@ fn CompileContext* context_create() {
     context.alloc        = alloc;
     context.profiler     = profiler::create(alloc);
     context.args         = args::create(alloc);
-    context.lookup       = lookup::create(alloc);
     context.llvm_context = llvm::context_create();
+    context.lookup       = lookup::create(alloc, context.llvm_context);
     context.registry     = registry::create(alloc);
     context.mods.init(alloc);
     context.trees.init(alloc);

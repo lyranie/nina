@@ -75,6 +75,84 @@ macro String @get_exec() {
     $endswitch
 }
 
+fn bool try_get_typeid_narrowing(Node* condition, String* out_var, String* out_type) {
+    if (condition.type != NodeType.BIN) {
+        return false;
+    }
+
+    if (condition.bin_node.operator.type != TokenType.IS_EQUAL) {
+        return false;
+    }
+
+    Node* left  = condition.bin_node.left;
+    Node* right = condition.bin_node.right;
+
+    String var_name;
+    if (!is_ident_typeid_access(left, &var_name)) {
+        return false;
+    }
+
+    String type_name;
+    if (!is_type_typeid_access(right, &type_name)) {
+        return false;
+    }
+
+    *out_var  = var_name;
+    *out_type = type_name;
+
+    return true;
+}
+
+fn bool is_ident_typeid_access(Node* node, String* out_var) {
+    if (node.type != NodeType.ACCESS) {
+        return false;
+    }
+
+    if (node.access_node.name.type != NodeType.IDENT) {
+        return false;
+    }
+
+    if (!node.access_node.next) {
+        return false;
+    }
+
+    if (node.access_node.next.type != NodeType.IDENT) {
+        return false;
+    }
+
+    if (node.access_node.next.ident_node.name != "$typeid") {
+        return false;
+    }
+
+    *out_var = node.access_node.name.ident_node.name;
+    return true;
+}
+
+fn bool is_type_typeid_access(Node* node, String* out_type) {
+    if (node.type != NodeType.ACCESS) {
+        return false;
+    }
+
+    if (node.access_node.name.type != NodeType.IDENT) {
+        return false;
+    }
+
+    if (!node.access_node.next) {
+        return false;
+    }
+
+    if (node.access_node.next.type != NodeType.IDENT) {
+        return false;
+    }
+
+    if (node.access_node.next.ident_node.name != "$typeid") {
+        return false;
+    }
+
+    *out_type = node.access_node.name.ident_node.name;
+    return true;
+}
+
 module llvm;
 
 fn LLVMTypeRef slice_type(LLVMTypeRef base) {

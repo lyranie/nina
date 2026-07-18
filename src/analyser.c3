@@ -1,5 +1,8 @@
 module nina::analyser;
 
+import llvm;
+
+import nina::util;
 import nina::scope;
 import nina::types;
 import nina::lookup;
@@ -265,6 +268,10 @@ fn void analyse_variable(Analyser* analyser, CompileContext* context, Node* node
         highlighter::error(context, context.current_file, node.range.from, node.range.to, "Variable names may not start with '$'");
     }
 
+    if (lookup::get_type_info(context, name)) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Variable names may not be type names");
+    }
+
     if (scope::has_variable(analyser.scope, name)) {
         VariableInfo* prev = scope::get_variable(analyser.scope, name);
         
@@ -400,47 +407,83 @@ fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) 
         return;
     }
 
-    if (!scope::has_variable(analyser.scope, name)) {
+    if (scope::has_variable(analyser.scope, name)) {
+        scope::get_variable(analyser.scope, name).used = true;
+
+        LookupElement base;
+
+        if (scope::has_narrowed_type(analyser.scope, name)) {
+            base = scope::get_narrowed_type(analyser.scope, name);
+        } else {
+            VariableInfo* variable_info = scope::get_variable(analyser.scope, name);
+            base = lookup::get(context, variable_info.node, analyser.scope);
+        }
+
+        Node* next = node.access_node.next;
+
+        while (next) {
+            String field_name;
+            Node*  after;
+
+            switch (next.type) {
+            case NodeType.IDENT:
+                field_name = next.ident_node.name;
+                after      = null;
+            case NodeType.ACCESS:
+                field_name = next.access_node.name.ident_node.name;
+                after      = next.access_node.next;
+            default:
+                highlighter::panic();
+            }
+
+            FieldResult result = lookup::get_field(context, analyser.scope, base, field_name);
+
+            if (result.field_node) {
+                base = lookup::get(context, result.field_node, analyser.scope);
+            } else if (result.lookup_element.type_name != "") {
+                base = result.lookup_element;
+            } else {
+                highlighter::error(context, context.current_file, next.range.from, next.range.to, "Could not find field '%s' on type '%s'", field_name, base.type_name);
+            }
+
+            next = after;
+        }
+    } else if (lookup::get_type_info(context, name)) {
+        TypeInfo*     type_info = lookup::get_type_info(context, name);
+        LookupElement base      = { .llvm_type = type_info.llvm_type, .type_name = type_info.name };
+
+        Node* next = node.access_node.next;
+
+        while (next) {
+            String field_name;
+            Node*  after;
+
+            switch (next.type) {
+            case NodeType.IDENT:
+                field_name = next.ident_node.name;
+                after      = null;
+            case NodeType.ACCESS:
+                field_name = next.access_node.name.ident_node.name;
+                after      = next.access_node.next;
+            default:
+                highlighter::panic();
+            }
+
+            FieldResult result = lookup::get_field(context, analyser.scope, base, field_name);
+
+            if (result.field_node) {
+                base = lookup::get(context, result.field_node, analyser.scope);
+            } else if (result.lookup_element.type_name != "") {
+                base = result.lookup_element;
+            } else {
+                highlighter::error(context, context.current_file, next.range.from, next.range.to, "Could not find field '%s' on type '%s'", field_name, base.type_name);
+            }
+
+            next = after;
+        }
+    } else {
         highlighter::error(context, context.current_file, path.range.from, path.range.to, "Could not find '%s'", name);
     }
-
-    scope::get_variable(analyser.scope, name).used = true;
-
-    // -- variable access --
-    VariableInfo* variable_info = scope::get_variable(analyser.scope, name);
-    LookupElement base          = lookup::get(context, variable_info.node, analyser.scope);
-
-    Node* next = node.access_node.next;
-
-    while (next) {
-        String field_name;
-        Node*  after;
-
-        switch (next.type) {
-        case NodeType.IDENT:
-            field_name = next.ident_node.name;
-            after      = null;
-        case NodeType.ACCESS:
-            field_name = next.access_node.name.ident_node.name;
-            after      = next.access_node.next;
-        default:
-            highlighter::panic("nested access unhandled");
-        }
-
-        FieldResult result = lookup::get_field(context, analyser.scope, base, field_name);
-
-        if (result.field_node) {
-            base = lookup::get(context, result.field_node, analyser.scope);
-        } else if (result.lookup_element.type_name != "") {
-            base = result.lookup_element;
-        } else {
-            highlighter::error(context, context.current_file, next.range.from, next.range.to, "Could not find field '%s' on type '%s'", field_name, base.type_name);
-        }
-
-        next = after;
-    }
-
-    // check ct fields
 }
 
 fn void analyse_unary(Analyser* analyser, CompileContext* context, Node* node) {
@@ -479,13 +522,40 @@ fn void analyse_if(Analyser* analyser, CompileContext* context, Node* node, void
     }
 
     analyser.scope = scope::create(context.alloc, analyser.scope);
+
+    String narrowed_var;
+    String narrowed_type;
+    if (util::try_get_typeid_narrowing(node.if_node.condition, &narrowed_var, &narrowed_type)) {
+        TypeInfo*   type_info = lookup::get_type_info(context, narrowed_type);
+        LLVMTypeRef llvm_type = type_info.llvm_type;
+
+        String type_group;
+
+        switch (llvm::get_type_kind(llvm_type)) {
+        case LLVMTypeKind.INTEGER_TYPE_KIND:
+            type_group = llvm::get_int_type_width(llvm_type) == 1 ? "boolean" : "integer";
+        case LLVMTypeKind.POINTER_TYPE_KIND:
+            type_group = "pointer";
+        case LLVMTypeKind.STRUCT_TYPE_KIND:
+            type_group = "struct";
+        default:
+            highlighter::panic();
+        }
+
+        scope::add_narrowed_type(analyser.scope, narrowed_var, {
+            .llvm_type  = llvm_type,
+            .type_name  = type_info.name,
+            .type_group = type_group
+        });
+    }
+
     analyse_compound(analyser, context, node.if_node.then_statements, data);
     analyser.scope = analyser.scope.parent;
-    
+
     analyser.scope = scope::create(context.alloc, analyser.scope);
     analyse_compound(analyser, context, node.if_node.else_statements, data);
     analyser.scope = analyser.scope.parent;
-    
+
     if (node.if_node.else_if) {
         analyse_node(analyser, context, node.if_node.else_if, data);
     }
