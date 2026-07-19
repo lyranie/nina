@@ -73,3 +73,7 @@ str copy(str s, Allocator alloc) {
     ret new str(copy, len);
 }
 */
+
+long write(File out, str s) {
+    
+}

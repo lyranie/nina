@@ -1,20 +1,14 @@
 mod test.main;
 
 use std.core.string;
+use std.io.file;
 use std.io;
 
-type Foo();
-
 int main() {
-    long a = 1;
-
-    io.printn(1);
-    io.printn(true);
-    io.printn(string.create("Test"));
-    io.printn(new Foo());
-    io.printn(a);
-    io.printn('o');
-    io.printn(1.1);
+    file.write_text("hello.txt", "Penis");
+    io.print(string.create("\e[91m"));
+    io.print(file.read_text("hello.txt"));
+    io.printn(string.create("\e[0m"));
 
     ret 0;
 }

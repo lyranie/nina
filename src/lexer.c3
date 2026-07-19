@@ -288,8 +288,8 @@ fn void string(Lexer* lexer, CompileContext* context) => @pool() {
             consume(lexer, column: true);
 
             switch (lexer.current) {
-            case 'n':
-                string.append("\n");
+            case 'n': string.append("\n");
+            case 'e': string.append("\e");
             }
 
             consume(lexer, column: true);

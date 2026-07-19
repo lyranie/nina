@@ -1,6 +1,7 @@
 mod std.io;
 
 use std.core.string;
+use std.io.file;
 use libc;
 
 void print(any a) {
@@ -36,4 +37,35 @@ void print(any a) {
 void printn(any a) {
     print(a);
     libc.printf("\n");
+}
+
+File stdout() {
+    ret new File(1);
+}
+
+File stderr() {
+    ret new File(2);
+}
+
+// -- NEW --
+
+long fprint(File out, any x)
+{
+	switch (x.$typeid) {
+	case str.$typeid: ret string.write(out, x.$data);
+	/*default:
+		$if $defined(String a = x):
+			return out.write((String)x);
+		$else
+			$if is_struct_with_default_print($Type):
+				Formatter formatter;
+				formatter.init(&out_putstream_fn, &&(OutStream)out);
+				return struct_to_format(x, &formatter, false);
+			$else
+				return fprintf(out, "%s", x);
+			$endif
+		$endif*/
+    default:
+        ret -1;
+    }
 }

@@ -765,6 +765,18 @@ fn bool always_returns(Analyser* analyser, CompileContext* context, Node* node) 
         bool else_if_returns = node.if_node.else_if ? always_returns(analyser, context, node.if_node.else_if) : true;
 
         return then_returns && else_returns && else_if_returns;
+    case NodeType.SWITCH:
+        foreach (Node* case_node : node.switch_node.cases) {
+            if (!always_returns(analyser, context, case_node)) {
+                return false;
+            }
+        }
+
+        return true;
+    case NodeType.CASE:
+       return compound_returns(analyser, context, node.case_node.statements);
+    case NodeType.DEFAULT:
+       return compound_returns(analyser, context, node.default_node.statements);
     default:
         return false;
     }

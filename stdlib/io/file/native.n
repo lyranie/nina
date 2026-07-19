@@ -1,0 +1,15 @@
+mod std.io.file.native;
+
+long fwrite(void* file, char* buffer)
+{
+    // assume libc for now
+	long len = libc.fwrite(buffer, 1, string.len_char(buffer), file);
+	if (len == 0 && string.len_char(buffer) == 0)
+	{
+		if (libc.ferror(file) == 0) {
+            ret file_open_errno();
+        }
+	}
+
+	ret len;
+}
