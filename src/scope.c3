@@ -140,7 +140,7 @@ fn void add_import(Scope* scope, String name) {
 
 fn bool has_import(Scope* scope, String name) {
     foreach (String use : scope.imports) {
-        if (use == name || use.ends_with(name)) {
+        if (use == name || use.ends_with(string::tformat(".%s", name))) {
             return true;
         }
     }

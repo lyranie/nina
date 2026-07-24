@@ -254,6 +254,11 @@ fn void analyse_bin(Analyser* analyser, CompileContext* context, Node* node, voi
 fn void analyse_ident(Analyser* analyser, CompileContext* context, Node* node) {
     String name = node.ident_node.name;
 
+    if (name.starts_with("$$")) {
+        @todo("check if builtin exists");
+        return;
+    }
+
     if (!scope::has_variable(analyser.scope, name)) {
         highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find variable '%s'", name);
     }

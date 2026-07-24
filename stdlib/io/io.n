@@ -29,7 +29,19 @@ void print(any a) {
         libc.printf("%d", a.$data);
         break;
     default:
-        libc.printf("<UNKNOWN>");
+        switch (a.$typekind) {
+        case $$STRUCT:
+            // TODO: add way to iterate fields after adding slices
+            libc.printf("{");
+            libc.printf("}");
+            break;
+        case $$POINTER:
+            libc.printf("%p", a.$data);
+            break;
+        default:
+            libc.printf("<UNKNOWN>");
+            break;
+        }
         break;
     }
 }

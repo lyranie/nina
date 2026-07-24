@@ -24,7 +24,7 @@ fn Lookup* create(Allocator alloc, LLVMContextRef llvm_context) {
     register_type(lookup, alloc, "String", "<builtin>", null, llvm::slice_type(llvm::int_8_type()));
 
     LLVMTypeRef any_type = llvm::struct_create_named(llvm_context, "any");
-    llvm::struct_set_body(any_type, (LLVMTypeRef[]){ llvm::pointer_type(llvm::int_8_type(), 0), llvm::int_32_type() }, 2, llvm::FALSE);
+    llvm::struct_set_body(any_type, (LLVMTypeRef[]){ llvm::pointer_type(llvm::int_8_type(), 0), llvm::pointer_type(llvm::int_8_type(), 0) }, 2, llvm::FALSE);
 
     register_type(lookup, alloc, "any", "<builtin>", null, any_type);
 
@@ -182,8 +182,14 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
     case NodeType.EXT:
         return get(context, node.ext_node.type, scope, generator);
     case NodeType.IDENT:
-        String name     = node.ident_node.name;
-        Node*  variable = scope::get_variable(scope, name).node;
+        String        name          = node.ident_node.name;
+        VariableInfo* variable_info = scope::get_variable(scope, name);
+
+        if (name.starts_with("$$")) {
+            return get_builtin(context, name, generator);
+        }
+
+        Node* variable = variable_info.node;
 
         return get(context, variable, scope, generator);
     case NodeType.VARIABLE:
@@ -329,7 +335,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         TypeInfo*       type_info       = get_type_info(context, "String");
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
         LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
-        String          type_name       = "string";
+        String          type_name       = "String";
         String          type_group      = "pointer";
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
@@ -488,6 +494,10 @@ fn LLVMMetadataRef create_debug_type(CompileContext* context, Generator* generat
 
         return llvm::di_builder_create_basic_type(generator.llvm_debug_builder, (CChar*)name.ptr, (CUInt)name.len, width, 5, LLVMDIFlags.DI_FLAG_ZERO);
     case LLVMTypeKind.STRUCT_TYPE_KIND:
+        if (type_info.name == "String") {
+            return null;
+        }
+
         String name = ((ZString)llvm::get_struct_name(llvm_type)).str_view().copy(context.alloc);
 
         CUInt field_count = llvm::count_struct_element_types(llvm_type);
@@ -567,6 +577,7 @@ fn FieldResult get_field(CompileContext* context, Scope* scope, LookupElement ba
         switch (field_name) {
         case "$size":
         case "$typeid":
+        case "$typekind":
             return { .lookup_element = { .type_name = "int", .type_group = "integer" } };
         case "$data":
             return { .lookup_element = base, .field_node = null };
@@ -630,5 +641,20 @@ fn int get_type_size(CompileContext* context, Scope* scope, LookupElement elemen
         return size;
     default:
         highlighter::panic("cannot get size of type group '%s'", element.type_group);
+    }
+}
+
+fn LookupElement get_builtin(CompileContext* context, String field_name, Generator* generator = null) {
+    switch (field_name) {
+    case "$$STRUCT":
+    case "$$POINTER":
+        LLVMTypeRef     llvm_type       = llvm::int_32_type();
+        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type);
+        String          type_name       = "int";
+        String          type_group      = "integer";
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
+    default:
+        return {};
     }
 }

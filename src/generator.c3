@@ -189,7 +189,7 @@ fn LLVMValueRef generate_int(Generator* generator, CompileContext* context, Node
     //     }
     // }
 
-    return create_int(int_type, node.int_node.number.to_int())!!;
+    return create_int(int_type, node.int_node.number.to_uint())!!;
 }
 
 fn void generate_ext(Generator* generator, CompileContext* context, Node* node) => @pool() {
@@ -413,6 +413,10 @@ fn LLVMValueRef generate_ident(Generator* generator, CompileContext* context, No
 
     debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
+    if (node.ident_node.name.starts_with("$$")) {
+        return get_builtin(context, node.ident_node.name);
+    }
+
     return llvm::build_load_2(generator.llvm_builder, variable_info.llvm_type, variable_info.llvm_value, "");
 }
 
@@ -427,6 +431,10 @@ fn LLVMValueRef generate_variable(Generator* generator, CompileContext* context,
     if (node.variable_node.value) {
         LLVMValueRef llvm_value = generate_node(generator, context, node.variable_node.value);
         llvm::build_store(generator.llvm_builder, llvm_value, llvm_alloca);
+    } else {
+        if (lookup::get(context, node, generator.scope, generator).type_group == "pointer") {
+            llvm::build_store(generator.llvm_builder, llvm::const_null(llvm_type), llvm_alloca);
+        }
     }
 
     scope::add_variable(generator.scope, context.alloc, name, node, llvm_type, llvm_alloca);
@@ -1214,7 +1222,7 @@ fn LLVMValueRef get_or_declare_function(Generator* generator, CompileContext* co
     return llvm::add_function(generator.llvm_module, (CChar*)name.ptr, function_info.llvm_type);
 }
 
-fn LLVMValueRef create_int(LLVMTypeRef int_type, int value) {
+fn LLVMValueRef create_int(LLVMTypeRef int_type, ulong value) {
     return llvm::const_int(int_type, (CULongLong)value, llvm::TRUE);
 }
 
@@ -1226,9 +1234,12 @@ fn LLVMValueRef get_reflection_value(Generator* generator, CompileContext* conte
         return create_int(lookup::get_type_info(context, "int").llvm_type, (ulong)size);
     case "$typeid":
         if (base.type_name == "any" && instance_ptr) {
-            LLVMTypeRef any_type = lookup::get_type_info(context, "any").llvm_type;
-            LLVMValueRef any_val = llvm::build_load_2(generator.llvm_builder, any_type, instance_ptr, "");
-            return llvm::build_extract_value(generator.llvm_builder, any_val, 1, "");
+            LLVMTypeRef  any_type = lookup::get_type_info(context, "any").llvm_type;
+            LLVMValueRef any_val  = llvm::build_load_2(generator.llvm_builder, any_type, instance_ptr, "");
+            LLVMValueRef desc_ptr = llvm::build_extract_value(generator.llvm_builder, any_val, 1, "");
+            LLVMValueRef desc_val = llvm::build_load_2(generator.llvm_builder, llvm::int_64_type(), desc_ptr, "");
+
+            return llvm::build_trunc(generator.llvm_builder, desc_val, llvm::int_32_type(), "");
         }
 
         int type_id = 5381;
@@ -1244,6 +1255,37 @@ fn LLVMValueRef get_reflection_value(Generator* generator, CompileContext* conte
         LLVMValueRef ptr_val  = llvm::build_extract_value(generator.llvm_builder, any_val, 0, "");
 
         return ptr_val;
+    case "$typekind":
+        if (base.type_name == "any" && instance_ptr) {
+            LLVMTypeRef  any_type = lookup::get_type_info(context, "any").llvm_type;
+            LLVMValueRef any_val  = llvm::build_load_2(generator.llvm_builder, any_type, instance_ptr, "");
+            LLVMValueRef desc_ptr = llvm::build_extract_value(generator.llvm_builder, any_val, 1, "");
+            LLVMValueRef desc_val = llvm::build_load_2(generator.llvm_builder, llvm::int_64_type(), desc_ptr, "");
+            LLVMValueRef shifted  = llvm::build_l_shr(generator.llvm_builder, desc_val, create_int(llvm::int_64_type(), 32), "");
+
+            return llvm::build_trunc(generator.llvm_builder, shifted, llvm::int_32_type(), "");
+        }
+
+        int kind = -1;
+        switch (llvm::get_type_kind(base.llvm_type)) {
+        case LLVMTypeKind.STRUCT_TYPE_KIND:
+            kind = 0;
+        case LLVMTypeKind.POINTER_TYPE_KIND:
+            kind = 1;
+        }
+
+        return create_int(lookup::get_type_info(context, "int").llvm_type, (ulong)kind);
+    default:
+        highlighter::panic("'%s' unhandled", field_name);
+    }
+}
+
+fn LLVMValueRef get_builtin(CompileContext* context, String field_name) {
+    switch (field_name) {
+    case "$$STRUCT":
+        return create_int(lookup::get_type_info(context, "int").llvm_type, 0);
+    case "$$POINTER":
+        return create_int(lookup::get_type_info(context, "int").llvm_type, 1);
     default:
         highlighter::panic("'%s' unhandled", field_name);
     }
@@ -1258,11 +1300,34 @@ fn LLVMValueRef make_any(Generator* generator, CompileContext* context, LLVMValu
         type_id = ((type_id << 5) + type_id) + c;
     }
 
+    int kind = -1;
+    switch (llvm::get_type_kind(value_type_info.llvm_type)) {
+    case LLVMTypeKind.STRUCT_TYPE_KIND:
+        kind = 0;
+    case LLVMTypeKind.POINTER_TYPE_KIND:
+        kind = 1;
+    }
+
+    ulong combined = ((ulong)(uint)kind << 32) | (uint)type_id;
+
+    LLVMValueRef desc_global;
+    if (!context.registry.type_ids.has_key(value_type_info.name)) {
+        LLVMTypeRef i64_type = llvm::int_64_type();
+        desc_global = llvm::add_global(generator.llvm_module, i64_type, "");
+
+        llvm::set_initializer(desc_global, create_int(i64_type, combined));
+        llvm::set_global_constant(desc_global, llvm::TRUE);
+
+        context.registry.type_ids.set(value_type_info.name, desc_global);
+    } else {
+        desc_global = context.registry.type_ids.get(value_type_info.name)!!;
+    }
+
     LLVMTypeRef  any_type = lookup::get_type_info(context, "any").llvm_type;
     LLVMValueRef any_val  = llvm::get_undef(any_type);
 
     any_val = llvm::build_insert_value(generator.llvm_builder, any_val, slot, 0, "");
-    any_val = llvm::build_insert_value(generator.llvm_builder, any_val, create_int(lookup::get_type_info(context, "int").llvm_type, (ulong)type_id), 1, "");
+    any_val = llvm::build_insert_value(generator.llvm_builder, any_val, desc_global, 1, "");
 
     return any_val;
 }

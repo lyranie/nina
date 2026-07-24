@@ -8,3 +8,4 @@
 - [ ] finish implementing interfaces
 - [ ] add usage tracking for variables and functions
 - [ ] fix error highlighting
+- [ ] fix anytype for pointers

@@ -1,14 +1,17 @@
 mod test.main;
 
+use std.core.allocator.arena;
 use std.core.string;
 use std.io.file;
 use std.io;
 
+use libc;
+
+type Person(str name, int age);
+
 int main() {
-    file.write_text("hello.txt", "Penis");
-    io.print(string.create("\e[91m"));
-    io.print(file.read_text("hello.txt"));
-    io.printn(string.create("\e[0m"));
+    Person p = new Person(string.create("Nathaniel Pinkerton"), -2);
+    io.printn(p);
 
     ret 0;
 }

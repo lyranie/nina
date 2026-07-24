@@ -333,6 +333,7 @@ struct FunctionSignature {
 struct Registry {
     HashMap{String, FunctionInfo*} functions;
     HashMap{String, TypeInfo*}     types;
+    HashMap{String, LLVMValueRef}  type_ids;
 }
 
 struct Analyser {

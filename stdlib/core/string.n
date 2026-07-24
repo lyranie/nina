@@ -75,5 +75,5 @@ str copy(str s, Allocator alloc) {
 */
 
 long write(File out, str s) {
-    
+    ret -1;
 }

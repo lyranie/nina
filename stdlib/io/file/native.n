@@ -1,5 +1,8 @@
 mod std.io.file.native;
 
+use libc;
+
+/*
 long fwrite(void* file, char* buffer)
 {
     // assume libc for now
