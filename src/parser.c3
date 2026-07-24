@@ -349,7 +349,7 @@ fn Node* parse_identifier_statement(Parser* parser, CompileContext* context, Lex
 
         return parse_assign_or_expr_statement(parser, context, lexer);
     case TokenType.EQUALS:
-        return parse_assign_or_expr_statement(parser, context, lexer);
+    case TokenType.LBRACKET:
     case TokenType.PLUS:
     case TokenType.MINUS:
     case TokenType.BANG:
@@ -648,6 +648,10 @@ fn Node* parse_dereference(Parser* parser, CompileContext* context, Lexer* lexer
 }
 
 fn Node* try_parse_suffix(Parser* parser, CompileContext* context, Lexer* lexer, Node* node) {
+    while (parser.current.type == TokenType.LBRACKET) {
+        node = parse_index(parser, context, lexer, node);
+    }
+
     if ((parser.current.type == TokenType.PLUS  ||
         parser.current.type == TokenType.MINUS ||
         parser.current.type == TokenType.BANG) &&
@@ -879,6 +883,23 @@ fn Node* parse_break(Parser* parser, CompileContext* context, Lexer* lexer) {
     return @make_node(context, NodeType.BREAK, start, end; node) {};
 }
 
+fn Node* parse_index(Parser* parser, CompileContext* context, Lexer* lexer, Node* target) {
+    Range start = target.range.from;
+
+    consume(parser, context, lexer, TokenType.LBRACKET);
+
+    Node* index = parse_expr(parser, context, lexer);
+
+    consume(parser, context, lexer, TokenType.RBRACKET);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.INDEX, start, end; node) {
+        node.index_node.target = target;
+        node.index_node.index  = index;
+    };
+}
+
 fn void consume(Parser* parser, CompileContext* context, Lexer* lexer, TokenType type) {
     if (parser.current.type != type) {
         highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Expected type '%s', got '%s'", type, parser.current.type);
@@ -936,7 +957,7 @@ fn bool is_qualified_type_ident(Parser* parser, CompileContext* context, Lexer* 
 
     bool result = parser.current.type == TokenType.IDENT
         || parser.current.type == TokenType.ASTERISK
-        || parser.current.type == TokenType.LBRACKET;
+        || (parser.current.type == TokenType.LBRACKET && peek(parser, lexer).type == TokenType.RBRACKET);
 
     restore(parser, mark);
     return result;

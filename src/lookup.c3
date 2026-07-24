@@ -470,6 +470,35 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         String          type_group      = "character";
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.INDEX:
+        LookupElement target_data = get(context, node.index_node.target, scope, generator);
+
+        String new_type_name;
+        if (target_data.type_name.ends_with("[]")) {
+            new_type_name = target_data.type_name[:target_data.type_name.len - 2];
+        } else {
+            new_type_name = target_data.type_name[:target_data.type_name.len - 1];
+        }
+
+        TypeInfo* type_info = get_type_info(context, new_type_name);
+
+        LLVMTypeRef     llvm_type       = type_info.llvm_type;
+        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
+        String          type_name       = new_type_name;
+        String          type_group;
+
+        switch (llvm::get_type_kind(llvm_type)) {
+        case LLVMTypeKind.INTEGER_TYPE_KIND:
+            type_group = llvm::get_int_type_width(llvm_type) == 1 ? "boolean" : "integer";
+        case LLVMTypeKind.POINTER_TYPE_KIND:
+            type_group = "pointer";
+        case LLVMTypeKind.STRUCT_TYPE_KIND:
+            type_group = "struct";
+        default:
+            highlighter::panic();
+        }
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
     default:
         highlighter::panic("Missing lookup::get case for type '%s'", node.type);
     }

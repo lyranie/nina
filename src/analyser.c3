@@ -61,6 +61,7 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
     case NodeType.CHAR:        break;
     case NodeType.SWITCH:      analyse_switch(analyser, context, node, data);
     case NodeType.BREAK:       break;
+    case NodeType.INDEX:       analyse_index(analyser, context, node);
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -758,6 +759,23 @@ fn void analyse_switch(Analyser* analyser, CompileContext* context, Node* node, 
         default:
             highlighter::panic();
         }
+    }
+}
+
+fn void analyse_index(Analyser* analyser, CompileContext* context, Node* node) {
+    analyse_node(analyser, context, node.index_node.target);
+    analyse_node(analyser, context, node.index_node.index);
+
+    LookupElement target = lookup::get(context, node.index_node.target, analyser.scope);
+
+    if (target.type_group != "pointer") {
+        highlighter::error(context, context.current_file, node.index_node.target.range.from, node.index_node.target.range.to, "Cannot index type '%s'", target.type_name);
+    }
+
+    LookupElement index = lookup::get(context, node.index_node.index, analyser.scope);
+
+    if (index.type_group != "integer") {
+        highlighter::error(context, context.current_file, node.index_node.index.range.from, node.index_node.index.range.to, "Index must be of type integer, got '%s'", index.type_name);
     }
 }
 

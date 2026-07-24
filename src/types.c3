@@ -285,6 +285,10 @@ struct Node {
         struct default_node {
             NodeList statements;
         }
+        struct index_node {
+            Node* target;
+            Node* index;
+        }
     }
 }
 
@@ -323,6 +327,7 @@ enum NodeType {
     CASE,
     DEFAULT,
     BREAK,
+    INDEX,
 }
 
 struct FunctionSignature {
