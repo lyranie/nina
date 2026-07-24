@@ -13,6 +13,8 @@ fn Args* create(Allocator alloc) {
     args.no_libc = false;
     args.output  = "";
     args.files.init(alloc);
+    args.linked_libs.init(alloc);
+    args.warnings.init(alloc);
 
     return args;
 }
@@ -69,6 +71,13 @@ fn void parse(Args* args, String[] argv) {
             }
 
             args.linked_libs.push(argv[++i]);
+        case "--warn":
+        case "-w":
+            if ((long)i + 1 >= argv.len) {
+                print_help(argv[0]);
+            }
+
+            args.warnings.push(argv[++i]);
         default:
             io::eprintfn("unrecognized option '%s'", argv[i]);
             print_help(argv[0]);
@@ -89,6 +98,8 @@ fn void print_help(String program) @noreturn @private {
     io::printfn("  --ir                         Emits the generated IR files for the selected backend.");
     io::printfn("  --no-libc                    Doesn't link against libc and the crt.");
     io::printfn("  --output, -o <file>          Specifies the output filename.");
+    io::printfn("  --warn, -w <option>          Enables warnings for the specified option.");
+    io::printfn("                               Possible options: all, no-unused");
     io::printfn("  --no-debug                   Doesn't emit debug symbols.");
     io::printfn("  --no-link                    Doesn't run the linker setup.");
 

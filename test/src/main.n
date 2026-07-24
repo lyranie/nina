@@ -1,17 +1,21 @@
 mod test.main;
 
-use std.core.allocator.arena;
-use std.core.string;
-use std.io.file;
-use std.io;
-
 use libc;
 
-type Person(str name, int age);
+type Foo(int* i);
+
+Foo* foo() {
+    Foo* foo = libc.malloc(Foo.$size);
+    foo.i = libc.malloc(int.$size);
+
+    ret foo;
+}
 
 int main() {
-    Person p = new Person(string.create("Nathaniel Pinkerton"), -2);
-    io.printn(p);
+    Foo* foo = foo();
+    *foo.i = 69;
+
+    libc.printf("%d\n", *foo.i);
 
     ret 0;
 }

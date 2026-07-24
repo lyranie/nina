@@ -24,6 +24,7 @@ struct Args {
     bool           no_linker;
     String         output;
     StringList     linked_libs;
+    StringList     warnings;
 }
 
 enum CompileCommand {

@@ -326,11 +326,14 @@ fn void analyse_compound(Analyser* analyser, CompileContext* context, NodeList s
 
     @todo("add usage module that tracks all usages per module and optimizes them away in codegen");
 
-    analyser.scope.variables.@each(; String name, VariableInfo* info) {
-        if (!info.used) {
-            highlighter::warn(context, context.current_file, info.node.range.from, info.node.range.to, "Unused variable '%s'", name);
-        }
-    };
+    if (context.args.warnings.contains("all") ||
+        context.args.warnings.contains("no-unused")) {
+        analyser.scope.variables.@each(; String name, VariableInfo* info) {
+            if (!info.used) {
+                highlighter::warn(context, context.current_file, info.node.range.from, info.node.range.to, "Unused variable '%s'", name);
+            }
+        };
+    }
 }
 
 fn void analyse_use(Analyser* analyser, CompileContext* context, Node* node) {
