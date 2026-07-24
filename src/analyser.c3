@@ -62,6 +62,8 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
     case NodeType.SWITCH:      analyse_switch(analyser, context, node, data);
     case NodeType.BREAK:       break;
     case NodeType.INDEX:       analyse_index(analyser, context, node);
+    case NodeType.ARRAY:       analyse_array(analyser, context, node);
+    case NodeType.TRAP:        break;
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -776,6 +778,27 @@ fn void analyse_index(Analyser* analyser, CompileContext* context, Node* node) {
 
     if (index.type_group != "integer") {
         highlighter::error(context, context.current_file, node.index_node.index.range.from, node.index_node.index.range.to, "Index must be of type integer, got '%s'", index.type_name);
+    }
+}
+
+fn void analyse_array(Analyser* analyser, CompileContext* context, Node* node) {
+    if (node.array_node.values.len() == 0) {
+        return;
+    }
+
+    Node* first = node.array_node.values[0];
+    analyse_node(analyser, context, first);
+
+    for (int i = 1; i < node.array_node.values.len(); i++) {
+        Node* value = node.array_node.values[i];
+        analyse_node(analyser, context, value);
+
+        if (!lookup::compare_type(context, first, value, analyser.scope)) {
+            String expected_type = lookup::get(context, first, analyser.scope).type_name;
+            String got_type      = lookup::get(context, value, analyser.scope).type_name;
+
+            highlighter::error(context, context.current_file, value.range.from, value.range.to, "Expected type '%s', got '%s'", expected_type, got_type);
+        }
     }
 }
 

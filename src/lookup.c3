@@ -157,7 +157,9 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         }
 
         String type_name  = string::format(context.alloc, "%s%s", name, node.type_node.suffix);
-        String type_group = node.type_node.suffix.ends_with("*") ? "pointer" : "";
+        String type_group = node.type_node.suffix.ends_with("*") || node.type_node.suffix.ends_with("[]")
+            ? "pointer"
+            : "";
 
         switch (llvm_type_kind) {
         case LLVMTypeKind.INTEGER_TYPE_KIND:
@@ -171,7 +173,9 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         case LLVMTypeKind.POINTER_TYPE_KIND:
             type_group = "pointer";
         case LLVMTypeKind.STRUCT_TYPE_KIND:
-            type_group = "struct";
+            if (!node.type_node.suffix.ends_with("[]")) {
+                type_group = "struct";
+            }
         }
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
@@ -499,6 +503,22 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         }
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.ARRAY:
+        LookupElement element_data;
+
+        if (node.array_node.values.len() > 0) {
+            element_data = get(context, node.array_node.values[0], scope, generator);
+        } else {
+            TypeInfo* void_info = get_type_info(context, "void");
+            element_data = { void_info.llvm_type, null, "void", "void" };
+        }
+
+        LLVMTypeRef     llvm_type       = llvm::slice_type(element_data.llvm_type);
+        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, null, element_data.llvm_debug_type);
+        String          type_name       = string::format(context.alloc, "%s[]", element_data.type_name);
+        String          type_group      = "pointer";
+
+        return { llvm_type, llvm_debug_type, type_name, type_group };
     default:
         highlighter::panic("Missing lookup::get case for type '%s'", node.type);
     }
@@ -613,6 +633,14 @@ fn FieldResult get_field(CompileContext* context, Scope* scope, LookupElement ba
         default:
             return {};
         }
+    }
+
+    if (base.type_name.ends_with("[]")) {
+        if (field_name == "len") {
+            return { .lookup_element = { .type_name = "int", .type_group = "integer" } };
+        }
+
+        return {};
     }
 
     String type_name = base.type_name;

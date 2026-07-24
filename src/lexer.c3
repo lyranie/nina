@@ -198,6 +198,7 @@ fn void word(Lexer* lexer, CompileContext* context) => @pool() {
     case "case":    type = TokenType.KW_CASE;
     case "default": type = TokenType.KW_DEFAULT;
     case "break":   type = TokenType.KW_BREAK;
+    case "trap":    type = TokenType.KW_TRAP;
     default:        type = TokenType.IDENT;
     }
 

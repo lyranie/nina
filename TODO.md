@@ -9,3 +9,5 @@
 - [ ] add usage tracking for variables and functions
 - [ ] fix error highlighting
 - [ ] fix anytype for pointers
+- [ ] update error messages to be clearer
+- [ ] add handle_call for generator; copy from analyser

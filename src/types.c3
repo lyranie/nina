@@ -104,6 +104,7 @@ enum TokenType {
     KW_CASE,
     KW_DEFAULT,
     KW_BREAK,
+    KW_TRAP,
 
     SEMI,
     LPAREN,
@@ -289,6 +290,9 @@ struct Node {
             Node* target;
             Node* index;
         }
+        struct array_node {
+            NodeList values;
+        }
     }
 }
 
@@ -328,6 +332,8 @@ enum NodeType {
     DEFAULT,
     BREAK,
     INDEX,
+    ARRAY,
+    TRAP,
 }
 
 struct FunctionSignature {

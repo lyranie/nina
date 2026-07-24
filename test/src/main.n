@@ -6,18 +6,22 @@ type Foo(Bar b);
 type Bar(int* a);
 
 int main() {
-    // int[] i;
-    // int[] j = [69, 420];
+    int[] i;
+    int[] j = [69, 420];
 
-    // libc.printf("%d\n", i.len);
-    // libc.printf("%d\n", j.len);
-    // libc.printf("%d\n", j[1]);
+    j[1] = 67;
 
-    // int x = 0;
-    // while (x < j.len) {
-    //     libc.printf("%d\n", j[x]);
-    //     x++;
-    // }
+    libc.printf("%d\n", i.len);
+    libc.printf("%d\n", j.len);
+    libc.printf("%d\n", j[0]);
+
+    libc.printf("-----------------\n");
+
+    int x = 0;
+    while (x < j.len) {
+        libc.printf("%d\n", j[x]);
+        x++;
+    }
 
 
     // -- WORKING --

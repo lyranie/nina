@@ -209,6 +209,7 @@ fn Node* parse_compound_statement(Parser* parser, CompileContext* context, Lexer
         case TokenType.KW_WHILE:  return parse_while(parser, context, lexer);
         case TokenType.KW_SWITCH: return parse_switch(parser, context, lexer);
         case TokenType.KW_BREAK:  return parse_break(parser, context, lexer);
+        case TokenType.KW_TRAP:   return parse_trap(parser, context, lexer);
         default:
             highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
         }
@@ -290,6 +291,7 @@ fn Node* parse_factor(Parser* parser, CompileContext* context, Lexer* lexer) {
     case TokenType.ASTERISK: node = parse_dereference(parser, context, lexer);
     case TokenType.REAL:     node = parse_real(parser, context, lexer);
     case TokenType.CHAR:     node = parse_char(parser, context, lexer);
+    case TokenType.LBRACKET: node = parse_array(parser, context, lexer);
     default:
         highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Expression expected, got '%s'", parser.current.type);
     }
@@ -348,8 +350,13 @@ fn Node* parse_identifier_statement(Parser* parser, CompileContext* context, Lex
         restore(parser, mark_start);
 
         return parse_assign_or_expr_statement(parser, context, lexer);
-    case TokenType.EQUALS:
     case TokenType.LBRACKET:
+        if (peek(parser, lexer, 2).type == TokenType.RBRACKET) {
+            return parse_variable(parser, context, lexer);
+        }
+
+        return parse_assign_or_expr_statement(parser, context, lexer);
+    case TokenType.EQUALS:
     case TokenType.PLUS:
     case TokenType.MINUS:
     case TokenType.BANG:
@@ -898,6 +905,43 @@ fn Node* parse_index(Parser* parser, CompileContext* context, Lexer* lexer, Node
         node.index_node.target = target;
         node.index_node.index  = index;
     };
+}
+
+fn Node* parse_array(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.LBRACKET);
+
+    NodeList values;
+    values.init(context.alloc);
+    if (parser.current.type != TokenType.RBRACKET) {
+        values.push(parse_expr(parser, context, lexer));
+
+        while (parser.current.type == TokenType.COMMA) {
+            consume(parser, context, lexer, TokenType.COMMA);
+
+            values.push(parse_expr(parser, context, lexer));
+        }
+    }
+
+    consume(parser, context, lexer, TokenType.RBRACKET);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.ARRAY, start, end; node) {
+        node.array_node.values = values;
+    };
+}
+
+fn Node* parse_trap(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.KW_TRAP);
+    consume(parser, context, lexer, TokenType.SEMI);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.TRAP, start, end; node) {};
 }
 
 fn void consume(Parser* parser, CompileContext* context, Lexer* lexer, TokenType type) {

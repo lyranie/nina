@@ -1,0 +1,10 @@
+mod std.core.builtin;
+
+use libc;
+
+void bounds_check(int index, int len, char* file_ptr, int file_len, int line) {
+    if (index < 0 || index >= len) {
+        libc.printf("Panic: index out of bounds (index: %d, len: %d) at %.*s:%d\n", index, len, file_len, file_ptr, line);
+        trap;
+    }
+}
