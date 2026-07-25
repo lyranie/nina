@@ -81,28 +81,64 @@ fn NodeList get_type_fields(CompileContext* context, TypeInfo* type_info, Scope*
     }
 }
 
-fn TypeInfo* get_type_info(CompileContext* context, String name) {
-    if (context.lookup.has_key(name)) {
-        Type*     type      = context.lookup.get(name)!!;
-        TypeInfo* type_info = alloc::new(context.alloc, TypeInfo);
+fn TypeInfo* get_type_info(CompileContext* context, String name, Node* node = null) {
+    if (name.ends_with("*")) {
+        TypeInfo* base_info = get_type_info(context, name[:name.len - 1]);
 
+        TypeInfo* type_info = alloc::new(context.alloc, TypeInfo);
         type_info.name      = name;
-        type_info.node      = type.node;
-        type_info.llvm_type = type.llvm_type;
+        type_info.node      = base_info.node;
+        type_info.llvm_type = llvm::pointer_type(base_info.llvm_type, 0);
 
         return type_info;
     }
 
-    String qualified_name = name.contains(".")
-        ? name
-        : string::tformat("%s.%s", context.current_module, name);
+    if (name.ends_with("[]")) {
+        TypeInfo* base_info = get_type_info(context, name[:name.len - 2]);
+
+        TypeInfo* type_info = alloc::new(context.alloc, TypeInfo);
+        type_info.name      = name;
+        type_info.node      = base_info.node;
+        type_info.llvm_type = llvm::slice_type(base_info.llvm_type);
+
+        return type_info;
+    }
 
     TypeInfo* type_info;
-    foreach (String type_name : context.registry.types.tkeys()) {
-        if (type_name == name ||
-            type_name.ends_with(string::tformat(".%s", name))) {
-            type_info = context.registry.types.get(type_name)!!;
-            break;
+
+    if (context.lookup.has_key(name)) {
+        Type* type = context.lookup.get(name)!!;
+        type_info = alloc::new(context.alloc, TypeInfo);
+
+        type_info.name      = name;
+        type_info.node      = type.node;
+        type_info.llvm_type = type.llvm_type;
+    } else {
+        foreach (String type_name : context.registry.types.tkeys()) {
+            if (type_name == name ||
+                type_name.ends_with(string::tformat(".%s", name))) {
+                type_info = context.registry.types.get(type_name)!!;
+                break;
+            }
+        }
+    }
+
+    if (node) {
+        String type_suffix = node.type_node.suffix;
+
+        while (type_suffix.ends_with("*") || type_suffix.ends_with("[]") || type_suffix.ends_with("[N]")) {
+            if (type_suffix.ends_with("*")) {
+                type_suffix = type_suffix[:type_suffix.len - 1];
+                type_info.llvm_type = llvm::pointer_type(type_info.llvm_type, 0);
+            } else if (type_suffix.ends_with("[N]")) {
+                type_suffix = type_suffix[:type_suffix.len - 3];
+
+                ulong array_size = eval_const_int(node.type_node.size);
+                type_info.llvm_type = llvm::array_type(type_info.llvm_type, (uint)array_size);
+            } else {
+                type_suffix = type_suffix[:type_suffix.len - 2];
+                type_info.llvm_type = llvm::slice_type(type_info.llvm_type);
+            }
         }
     }
 
@@ -130,14 +166,19 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
         LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
 
-        while (type_suffix.ends_with("*") || type_suffix.ends_with("[]")) {
-            switch (type_suffix[type_suffix.len - 1]) {
-            case '*':
+        while (type_suffix.ends_with("*") || type_suffix.ends_with("[]") || type_suffix.ends_with("[N]")) {
+            if (type_suffix.ends_with("*")) {
                 type_suffix = type_suffix[:type_suffix.len - 1];
                 llvm_type   = llvm::pointer_type(llvm_type, 0);
                 llvm_debug_type = create_debug_type(context, generator, llvm_type, null, llvm_debug_type);
-            case ']':
-                type_suffix = type_suffix[:type_suffix.len - 1];
+            } else if (type_suffix.ends_with("[N]")) {
+                type_suffix = type_suffix[:type_suffix.len - 3];
+
+                ulong array_size = eval_const_int(node.type_node.size);
+                llvm_type = llvm::array_type(llvm_type, (uint)array_size);
+                llvm_debug_type = create_debug_type(context, generator, llvm_type, null, llvm_debug_type);
+            } else {
+                type_suffix = type_suffix[:type_suffix.len - 2];
                 llvm_type   = llvm::slice_type(llvm_type);
                 llvm_debug_type = create_debug_type(context, generator, llvm_type, null, llvm_debug_type);
             }
@@ -159,7 +200,9 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         String type_name  = string::format(context.alloc, "%s%s", name, node.type_node.suffix);
         String type_group = node.type_node.suffix.ends_with("*") || node.type_node.suffix.ends_with("[]")
             ? "pointer"
-            : "";
+            : node.type_node.suffix.ends_with("[N]")
+                ? "array"
+                : "";
 
         switch (llvm_type_kind) {
         case LLVMTypeKind.INTEGER_TYPE_KIND:
@@ -176,6 +219,8 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             if (!node.type_node.suffix.ends_with("[]")) {
                 type_group = "struct";
             }
+        case LLVMTypeKind.ARRAY_TYPE_KIND:
+            type_group = "array";
         }
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
@@ -215,6 +260,23 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             String          type_group      = "boolean";
 
             return { llvm_type, llvm_debug_type, type_name, type_group };
+        case TokenType.PLUS:
+        case TokenType.MINUS:
+            LookupElement left_data = get(context, node.bin_node.left, scope, generator);
+
+            if (left_data.type_name.ends_with("[]")) {
+                String element_name = left_data.type_name[:left_data.type_name.len - 2];
+
+                TypeInfo*       type_info       = get_type_info(context, element_name);
+                LLVMTypeRef     llvm_type       = llvm::pointer_type(type_info.llvm_type, 0);
+                LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, null, create_debug_type(context, generator, type_info.llvm_type, type_info));
+                String          type_name       = string::format(context.alloc, "%s*", element_name);
+                String          type_group      = "pointer";
+
+                return { llvm_type, llvm_debug_type, type_name, type_group };
+            }
+
+            return left_data;
         default:
             return get(context, node.bin_node.left, scope, generator);
         }
@@ -431,7 +493,6 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
 
             return { llvm_type, llvm_debug_type, type_name, type_group };
         case LLVMTypeKind.STRUCT_TYPE_KIND:
-            io::printn("struct");
             highlighter::panic();
         default:
             highlighter::panic("Missing get_base_type_group#DEREFERENCE case for type kind '%s'", pointee_type_kind);
@@ -519,6 +580,8 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         String          type_group      = "pointer";
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
+    case NodeType.CAST:
+        return get(context, node.cast_node.type, scope, generator);
     default:
         highlighter::panic("Missing lookup::get case for type '%s'", node.type);
     }
@@ -635,9 +698,11 @@ fn FieldResult get_field(CompileContext* context, Scope* scope, LookupElement ba
         }
     }
 
-    if (base.type_name.ends_with("[]")) {
-        if (field_name == "len") {
-            return { .lookup_element = { .type_name = "int", .type_group = "integer" } };
+    @todo("check if group is slice");
+    if (base.type_name.ends_with("[]") || base.type_name == "String") {
+        switch (field_name) {
+        case "len": return { .lookup_element = { .type_name = "int", .type_group = "integer" } };
+        case "ptr": return { .lookup_element = { .type_name = "char*", .type_group = "pointer" } };
         }
 
         return {};
@@ -713,5 +778,26 @@ fn LookupElement get_builtin(CompileContext* context, String field_name, Generat
         return { llvm_type, llvm_debug_type, type_name, type_group };
     default:
         return {};
+    }
+}
+
+fn ulong eval_const_int(Node* node) {
+    switch (node.type) {
+    case NodeType.INT:
+        return node.int_node.number.to_uint()!!;
+    case NodeType.BIN:
+        ulong left  = eval_const_int(node.bin_node.left);
+        ulong right = eval_const_int(node.bin_node.right);
+
+        switch (node.bin_node.operator.type) {
+        case TokenType.PLUS:     return left + right;
+        case TokenType.MINUS:    return left - right;
+        case TokenType.ASTERISK: return left * right;
+        case TokenType.SLASH:    return left / right;
+        default:
+            highlighter::panic("Unsupported operator in constant array size expression");
+        }
+    default:
+        highlighter::panic("Array size must be a constant expression");
     }
 }

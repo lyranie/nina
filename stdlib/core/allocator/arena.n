@@ -1,12 +1,36 @@
 mod std.core.allocator.arena;
 
-use libc;
+use std.os.linux;
 
-type Arena(char* buffer, int capacity, int offset);
+type Page(char* memory, int total, int used, Page* prev);
+type Arena(Page* page, Page* unused_page, int page_size);
 
-Arena create(int capacity) {
-    char* backing = libc.malloc(capacity);
-    ret new Arena(backing, capacity, 0);
+char* map_pages(int size) {
+    char* result = linux.mmap(null, size, 3, 34, -1, 0);
+
+    ret result;
+}
+
+void unmap_pages(char* memory, int size) {
+    linux.munmap(memory, size);
+}
+
+Page* create_page(int size) {
+    char* page_memory = map_pages(Page.$size);
+    Page* page = page_memory as Page*;
+
+    char* memory = map_pages(size);
+
+    page.memory = memory;
+    page.total  = size;
+    page.used   = 0;
+    page.prev   = null;
+
+    ret page;
+}
+
+Arena create(int page_size) {
+    ret new Arena(null, null, page_size);
 }
 
 int align_up(int n, int align) {
@@ -19,26 +43,98 @@ int align_up(int n, int align) {
     ret multiple;
 }
 
-void* alloc(Arena* a, int size, int align) {
-    int aligned_offset = align_up(a.offset, align);
-
-    if (aligned_offset + size > a.capacity) {
-        ret null;
+int max_size(int a, int b) {
+    if (a > b) {
+        ret a;
     }
 
-    a.offset = aligned_offset + size;
-    ret a.buffer + aligned_offset;
+    ret b;
+}
+
+void* alloc(Arena* a, int size, int align) {
+    if (a.page == null) {
+        if (a.unused_page != null) {
+            a.page = a.unused_page;
+            a.unused_page = a.unused_page.prev;
+            a.page.prev = null;
+        } else {
+            int new_page_size = max_size(size, a.page_size);
+            a.page = create_page(new_page_size);
+        }
+    }
+
+    int aligned_offset = align_up(a.page.used, align);
+
+    if (aligned_offset + size > a.page.total) {
+        if (a.unused_page != null) {
+            Page* candidate = a.unused_page;
+            int candidate_offset = align_up(candidate.used, align);
+
+            if (candidate_offset + size <= candidate.total) {
+                a.unused_page = candidate.prev;
+                candidate.prev = a.page;
+                a.page = candidate;
+                aligned_offset = candidate_offset;
+            } else {
+                int new_page_size = max_size(size, a.page_size);
+                Page* new_page = create_page(new_page_size);
+
+                new_page.prev = a.page;
+                a.page = new_page;
+                aligned_offset = 0;
+            }
+        } else {
+            int new_page_size = max_size(size, a.page_size);
+            Page* new_page = create_page(new_page_size);
+
+            new_page.prev = a.page;
+            a.page = new_page;
+            aligned_offset = 0;
+        }
+    }
+
+    a.page.used = aligned_offset + size;
+
+    ret a.page.memory + aligned_offset;
 }
 
 void reset(Arena* a) {
-    a.offset = 0;
+    Page* page = a.page;
+
+    while (page != null) {
+        Page* next = page.prev;
+
+        page.used = 0;
+        page.prev = a.unused_page;
+        a.unused_page = page;
+
+        page = next;
+    }
+
+    a.page = null;
 }
 
 void free(Arena* a) {
-    int i = 0;
+    Page* page = a.page;
 
-    while (i < a.capacity) {
-        *(a.buffer + i) = 0;
-        i++;
+    while (page != null) {
+        Page* next = page.prev;
+
+        unmap_pages(page.memory, page.total);
+        unmap_pages(page as char*, Page.$size);
+        page = next;
     }
+
+    page = a.unused_page;
+
+    while (page != null) {
+        Page* next = page.prev;
+
+        unmap_pages(page.memory, page.total);
+        unmap_pages(page as char*, Page.$size);
+        page = next;
+    }
+
+    a.page = null;
+    a.unused_page = null;
 }

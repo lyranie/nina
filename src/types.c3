@@ -171,6 +171,7 @@ struct Node {
         struct type_node {
             Node*  name;
             String suffix;
+            Node*  size;
         }
         struct ident_node {
             String name;

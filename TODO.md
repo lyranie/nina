@@ -4,10 +4,10 @@
 - [ ] add bounds checks for integer types
 - [x] add reflection fields to types
 - [x] clean up access generator logic
-- [ ] implement slices
+- [x] implement slices
 - [ ] finish implementing interfaces
 - [ ] add usage tracking for variables and functions
 - [ ] fix error highlighting
-- [ ] fix anytype for pointers
+- [x] fix anytype for pointers
 - [ ] update error messages to be clearer
 - [ ] add handle_call for generator; copy from analyser

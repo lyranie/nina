@@ -64,6 +64,7 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
     case NodeType.INDEX:       analyse_index(analyser, context, node);
     case NodeType.ARRAY:       analyse_array(analyser, context, node);
     case NodeType.TRAP:        break;
+    case NodeType.CAST:        analyse_cast(analyser, context, node);
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -799,6 +800,43 @@ fn void analyse_array(Analyser* analyser, CompileContext* context, Node* node) {
 
             highlighter::error(context, context.current_file, value.range.from, value.range.to, "Expected type '%s', got '%s'", expected_type, got_type);
         }
+    }
+}
+
+fn void analyse_cast(Analyser* analyser, CompileContext* context, Node* node) {
+    analyse_node(analyser, context, node.cast_node.node);
+    analyse_node(analyser, context, node.cast_node.type);
+
+    LookupElement from = lookup::get(context, node.cast_node.node, analyser.scope);
+    LookupElement to   = lookup::get(context, node.cast_node.type, analyser.scope);
+
+    bool valid = false;
+
+    if ((from.type_group == "integer" || from.type_group == "boolean" || from.type_group == "character") &&
+        (to.type_group   == "integer" || to.type_group   == "boolean" || to.type_group   == "character")) {
+        valid = true;
+    }
+
+    if ((from.type_group == "integer" || from.type_group == "real") &&
+        (to.type_group   == "integer" || to.type_group   == "real")) {
+        valid = true;
+    }
+
+    if (from.type_group == "pointer" && to.type_group == "pointer") {
+        valid = true;
+    }
+
+    if (from.type_name.ends_with("[N]") && to.type_name.ends_with("[]")) {
+        String from_element = from.type_name[:from.type_name.index_of("[")]!!;
+        String to_element   = to.type_name[:to.type_name.len - 2];
+
+        if (from_element == to_element) {
+            valid = true;
+        }
+    }
+
+    if (!valid) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot cast type '%s' to type '%s'", from.type_name, to.type_name);
     }
 }
 

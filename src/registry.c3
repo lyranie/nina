@@ -14,6 +14,7 @@ fn Registry* create(Allocator alloc) {
 
     registry.functions.init(alloc);
     registry.types.init(alloc);
+    registry.type_ids.init(alloc);
 
     return registry;
 }
@@ -29,6 +30,36 @@ fn void register_types(CompileContext* context, Node* node) {
 
 fn void register_functions(CompileContext* context, Node* node) {
     _register_functions(context, node);
+}
+
+fn void register_struct_bodies(CompileContext* context, Node* node) {
+    switch (node.type) {
+    case NodeType.STRUCT:
+        String mod_name  = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
+        String type_name = node.struct_node.name.ident_node.name;
+        String name      = string::format(context.alloc, "%s.%s", mod_name, type_name);
+
+        TypeInfo* type_info = context.registry.types.get(name)!!;
+
+        if (!llvm::is_opaque_struct(type_info.llvm_type)) {
+            break;
+        }
+
+        List{LLVMTypeRef} fields;
+        fields.tinit();
+
+        foreach (Node* field : node.struct_node.fields) {
+            fields.push(lookup::get(context, field.parameter_node.type, null).llvm_type);
+        }
+
+        llvm::struct_set_body(type_info.llvm_type, fields.to_array(context.alloc), (CUInt)fields.len(), llvm::FALSE);
+    case NodeType.MOD:
+        foreach (Node* statement : node.mod_node.statements) {
+            register_struct_bodies(context, statement);
+        }
+    default:
+        break;
+    }
 }
 
 fn void _register_types(CompileContext* context, Node* node) {

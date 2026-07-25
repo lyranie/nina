@@ -103,6 +103,8 @@ fn Node* parse_type(Parser* parser, CompileContext* context, Lexer* lexer) => @p
     DString suffix;
     suffix.tinit();
 
+    Node* size_expr = null;
+
     while (parser.current.type == TokenType.ASTERISK || parser.current.type == TokenType.LBRACKET)
     {
         switch (parser.current.type)
@@ -111,9 +113,16 @@ fn Node* parse_type(Parser* parser, CompileContext* context, Lexer* lexer) => @p
             suffix.append('*');
             consume(parser, context, lexer, TokenType.ASTERISK);
         case TokenType.LBRACKET:
-            suffix.append("[]");
             consume(parser, context, lexer, TokenType.LBRACKET);
-            consume(parser, context, lexer, TokenType.RBRACKET);
+
+            if (parser.current.type == TokenType.RBRACKET) {
+                suffix.append("[]");
+                consume(parser, context, lexer, TokenType.RBRACKET);
+            } else {
+                size_expr = parse_expr(parser, context, lexer);
+                suffix.append("[N]");
+                consume(parser, context, lexer, TokenType.RBRACKET);
+            }
         default:
             highlighter::panic();
         }
@@ -124,6 +133,7 @@ fn Node* parse_type(Parser* parser, CompileContext* context, Lexer* lexer) => @p
     return @make_node(context, NodeType.TYPE, start, end; node) {
         node.type_node.name   = name;
         node.type_node.suffix = suffix.copy_str(context.alloc);
+        node.type_node.size   = size_expr;
     };
 }
 
@@ -297,6 +307,7 @@ fn Node* parse_factor(Parser* parser, CompileContext* context, Lexer* lexer) {
     }
 
     node = try_parse_suffix(parser, context, lexer, node);
+    node = parse_cast(parser, context, lexer, node);
 
     return node;
 }
@@ -351,7 +362,7 @@ fn Node* parse_identifier_statement(Parser* parser, CompileContext* context, Lex
 
         return parse_assign_or_expr_statement(parser, context, lexer);
     case TokenType.LBRACKET:
-        if (peek(parser, lexer, 2).type == TokenType.RBRACKET) {
+        if (is_type_bracket(parser, context, lexer)) {
             return parse_variable(parser, context, lexer);
         }
 
@@ -944,6 +955,24 @@ fn Node* parse_trap(Parser* parser, CompileContext* context, Lexer* lexer) {
     return @make_node(context, NodeType.TRAP, start, end; node) {};
 }
 
+fn Node* parse_cast(Parser* parser, CompileContext* context, Lexer* lexer, Node* node) {
+    while (parser.current.type == TokenType.KW_AS) {
+        consume(parser, context, lexer, TokenType.KW_AS);
+
+        Node* type = parse_type(parser, context, lexer);
+        Range end  = peek(parser, lexer, -1).range.end;
+
+        Node* expr = clone_node(context, node);
+
+        node = @make_node(context, NodeType.CAST, expr.range.from, end; _node) {
+            _node.cast_node.node = expr;
+            _node.cast_node.type = type;
+        };
+    }
+
+    return node;
+}
+
 fn void consume(Parser* parser, CompileContext* context, Lexer* lexer, TokenType type) {
     if (parser.current.type != type) {
         highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Expected type '%s', got '%s'", type, parser.current.type);
@@ -1002,6 +1031,35 @@ fn bool is_qualified_type_ident(Parser* parser, CompileContext* context, Lexer* 
     bool result = parser.current.type == TokenType.IDENT
         || parser.current.type == TokenType.ASTERISK
         || (parser.current.type == TokenType.LBRACKET && peek(parser, lexer).type == TokenType.RBRACKET);
+
+    restore(parser, mark);
+    return result;
+}
+
+fn bool is_type_bracket(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Mark mark = save(parser);
+
+    consume(parser, context, lexer, TokenType.IDENT);
+
+    while (parser.current.type == TokenType.ASTERISK || parser.current.type == TokenType.LBRACKET) {
+        switch (parser.current.type) {
+        case TokenType.ASTERISK:
+            consume(parser, context, lexer, TokenType.ASTERISK);
+        case TokenType.LBRACKET:
+            consume(parser, context, lexer, TokenType.LBRACKET);
+
+            if (parser.current.type == TokenType.RBRACKET) {
+                consume(parser, context, lexer, TokenType.RBRACKET);
+            } else {
+                parse_expr(parser, context, lexer);
+                consume(parser, context, lexer, TokenType.RBRACKET);
+            }
+        default:
+            highlighter::panic();
+        }
+    }
+
+    bool result = parser.current.type == TokenType.IDENT;
 
     restore(parser, mark);
     return result;

@@ -6,7 +6,7 @@ use libc;
 
 void print(any a) {
     switch (a.$typeid) {
-    case str.$typeid:
+    case String.$typeid:
         libc.printf("%s", a.$data.ptr);
         break;
     case int.$typeid:

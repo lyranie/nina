@@ -1,39 +1,17 @@
 mod test.main;
 
+use std.io;
 use libc;
 
-type Foo(Bar b);
-type Bar(int* a);
+type Foo();
 
 int main() {
-    int[] i;
-    int[] j = [69, 420];
-
-    j[1] = 67;
-
-    libc.printf("%d\n", i.len);
-    libc.printf("%d\n", j.len);
-    libc.printf("%d\n", j[0]);
-
-    libc.printf("-----------------\n");
-
-    int x = 0;
-    while (x < j.len) {
-        libc.printf("%d\n", j[x]);
-        x++;
-    }
-
-
-    // -- WORKING --
-    /// int* a = libc.malloc(int.$size * 4);
-    /// a[2] = 69;
-
-    /// libc.printf("%d\n", a[2]);
-
-    /// Foo f = new Foo(new Bar(libc.malloc(int.$size * 4)));
-    /// f.b.a[2] = 67;
-
-    /// libc.printf("%d\n", f.b.a[2]);
+    io.printn("Penis");
+    io.printn(1);
+    io.printn('b');
+    io.printn(true);
+    io.printn(new Foo());
+    io.printn(&1);
 
     ret 0;
 }
