@@ -1,17 +1,33 @@
 mod test.main;
 
-use std.io;
 use libc;
 
-type Foo();
+/*
+ * Pseudo code to visualize how `std.io.print` could display structs
+ */
+type Person(String name, int age, bool is_dev);
 
 int main() {
-    io.printn("Penis");
-    io.printn(1);
-    io.printn('b');
-    io.printn(true);
-    io.printn(new Foo());
-    io.printn(&1);
+    String[] fields = [
+        "name: Allie",
+        "age: 23",
+        "is_dev: true"
+    ];
+
+    libc.printf("{");
+    if (fields.len > 0) {
+        libc.printf(" %s", fields[0]);
+
+        if (fields.len > 1) {
+            int i = 1;
+            while (i < fields.len) {
+                libc.printf(", %s", fields[i]);
+                i++;
+            }
+        }
+    }
+
+    libc.printf(" }\n");
 
     ret 0;
 }

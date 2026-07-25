@@ -33,7 +33,27 @@ void print(any a) {
         case $$STRUCT:
             // TODO: add way to iterate fields after adding slices
             libc.printf("{");
-            libc.printf("}");
+/*
+            if (a.$data.$fields.len > 0) {
+                libc.printf(" ");
+                print(a.$data.$fields[0].name);
+                libc.printf(": ");
+                print(a.$data.$fields[0].value);
+
+                if (a.$data.$fields.len > 1) {
+                    int i = 1;
+                    while (i < a.$data.$fields.len) {
+                        libc.printf(", ");
+                        print(a.$data.$fields[0].name);
+                        libc.printf(": ");
+                        print(a.$data.$fields[0].value);
+                        // print ,
+                        // print field
+                    }
+                }
+            }
+*/
+            libc.printf(" }");
             break;
         case $$POINTER:
             libc.printf("%p", a.$data);
