@@ -1,5 +1,11 @@
 mod std.core.allocator;
 
+use std.core.allocator.arena;
+
+Arena heap() {
+    ret arena.create(1024 * 64);
+}
+
 /*
 base Allocator {
     void* alloc(Allocator* alloc, int size, int align);

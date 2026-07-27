@@ -65,6 +65,7 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
     case NodeType.ARRAY:       analyse_array(analyser, context, node);
     case NodeType.TRAP:        break;
     case NodeType.CAST:        analyse_cast(analyser, context, node);
+    case NodeType.SLICE:       analyse_slice(analyser, context, node);
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -771,7 +772,8 @@ fn void analyse_index(Analyser* analyser, CompileContext* context, Node* node) {
 
     LookupElement target = lookup::get(context, node.index_node.target, analyser.scope);
 
-    if (target.type_group != "pointer") {
+    bool is_array = target.type_name.ends_with("]");
+    if (target.type_group != "pointer" && !is_array) {
         highlighter::error(context, context.current_file, node.index_node.target.range.from, node.index_node.target.range.to, "Cannot index type '%s'", target.type_name);
     }
 
@@ -835,8 +837,40 @@ fn void analyse_cast(Analyser* analyser, CompileContext* context, Node* node) {
         }
     }
 
+    if (from.type_name == "char*" && to.type_name == "String") {
+        valid = true;
+    }
+
+    if (from.type_name == to.type_name) {
+        valid = true;
+    }
+
     if (!valid) {
         highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot cast type '%s' to type '%s'", from.type_name, to.type_name);
+    }
+}
+
+fn void analyse_slice(Analyser* analyser, CompileContext* context, Node* node) {
+    analyse_node(analyser, context, node.slice_node.target);
+    analyse_node(analyser, context, node.slice_node.index);
+    analyse_node(analyser, context, node.slice_node.offset);
+
+    LookupElement target = lookup::get(context, node.slice_node.target, analyser.scope);
+
+    if (target.type_group != "pointer") {
+        highlighter::error(context, context.current_file, node.slice_node.target.range.from, node.slice_node.target.range.to, "Cannot index type '%s'", target.type_name);
+    }
+
+    LookupElement index = lookup::get(context, node.slice_node.index, analyser.scope);
+
+    if (index.type_group != "integer") {
+        highlighter::error(context, context.current_file, node.slice_node.index.range.from, node.slice_node.index.range.to, "Index must be of type integer, got '%s'", index.type_name);
+    }
+
+    LookupElement offset = lookup::get(context, node.slice_node.offset, analyser.scope);
+
+    if (offset.type_group != "integer") {
+        highlighter::error(context, context.current_file, node.slice_node.offset.range.from, node.slice_node.offset.range.to, "Offset must be of type integer, got '%s'", offset.type_name);
     }
 }
 

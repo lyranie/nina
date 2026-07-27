@@ -10,7 +10,7 @@ void print(any a) {
         libc.printf("%s", a.$data.ptr);
         break;
     case int.$typeid:
-        libc.printf("%d", a.$data);
+        libc.printf("%d", a.$data as int);
         break;
     case bool.$typeid:
         if (a.$data) {
@@ -20,13 +20,13 @@ void print(any a) {
         }
         break;
     case real.$typeid:
-        libc.printf("%.2f", a.$data);
+        libc.printf("%.2f", a.$data as real);
         break;
     case char.$typeid:
-        libc.printf("%c", a.$data);
+        libc.printf("%c", a.$data as char);
         break;
     case long.$typeid:
-        libc.printf("%d", a.$data);
+        libc.printf("%d", a.$data as long);
         break;
     default:
         switch (a.$typekind) {

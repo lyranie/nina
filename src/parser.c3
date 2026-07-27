@@ -908,6 +908,22 @@ fn Node* parse_index(Parser* parser, CompileContext* context, Lexer* lexer, Node
 
     Node* index = parse_expr(parser, context, lexer);
 
+    if (parser.current.type == TokenType.COLON) {
+        consume(parser, context, lexer, TokenType.COLON);
+
+        Node* offset = parse_expr(parser, context, lexer);
+
+        consume(parser, context, lexer, TokenType.RBRACKET);
+        
+        Range end = peek(parser, lexer, -1).range.end;
+
+        return @make_node(context, NodeType.SLICE, start, end; node) {
+            node.slice_node.target = target;
+            node.slice_node.index  = index;
+            node.slice_node.offset = offset;
+        };
+    }
+
     consume(parser, context, lexer, TokenType.RBRACKET);
 
     Range end = peek(parser, lexer, -1).range.end;

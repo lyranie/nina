@@ -1,0 +1,27 @@
+mod std.core.char;
+
+bool is_alpha(char c) {
+    ret (c >= 'a' && c <= 'z') ||
+        (c >= 'A' && c <= 'Z');
+}
+
+bool is_digit(char c) {
+    ret c >= '0' && c <= '9';
+}
+
+bool is_alnum(char c) {
+    ret is_alpha(c) || is_digit(c);
+}
+
+bool is_space(char c) {
+    ret c == ' '  ||
+        c == '\t' ||
+        c == '\r' ||
+        c == '\n' ||
+        c == '\v' ||
+        c == '\f';
+}
+
+bool is_newline(char c) {
+    ret c == '\n' || c == '\r';
+}

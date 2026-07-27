@@ -1,0 +1,17 @@
+mod std.core.stub;
+
+use std.io;
+use std.core.allocator;
+use std.core.allocator.arena;
+
+String[] argv_to_args(int argc, char** argv) {
+    String* args_ptr = arena.alloc(&allocator.heap(), argc * String.$size, 8);
+
+    int i = 0;
+    while (i < argc) {
+        args_ptr[i] = argv[i] as String;
+        i++;
+    }
+
+    ret args_ptr[0:argc];
+}

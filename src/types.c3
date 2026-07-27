@@ -294,6 +294,11 @@ struct Node {
         struct array_node {
             NodeList values;
         }
+        struct slice_node {
+            Node* target;
+            Node* index;
+            Node* offset;
+        }
     }
 }
 
@@ -335,6 +340,7 @@ enum NodeType {
     INDEX,
     ARRAY,
     TRAP,
+    SLICE,
 }
 
 struct FunctionSignature {

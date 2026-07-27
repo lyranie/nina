@@ -326,8 +326,14 @@ fn void character(Lexer* lexer, CompileContext* context) => @pool() {
         consume(lexer, column: true);
 
         switch (lexer.current) {
-        case 'n':
-            character.append("\n");
+        case 'n':  character.append("\n");
+        case 't':  character.append("\t");
+        case 'r':  character.append("\r");
+        case '0':  character.append("\0");
+        case '\\': character.append("\\");
+        case '\'': character.append("'");
+        case '"':  character.append("\"");
+        default:   character.append(lexer.current);
         }
 
         consume(lexer, column: true);
