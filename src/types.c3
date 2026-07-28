@@ -436,6 +436,7 @@ union FieldResult {
 }
 
 struct Generator {
+    String                  file;
     String                  module_name;
     Scope*                  scope;
     LLVMModuleRef           llvm_module;

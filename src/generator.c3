@@ -18,6 +18,7 @@ fn Generator* create(CompileContext* context) {
 
     String mod = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
 
+    generator.file        = context.current_file;
     generator.module_name = mod;
     generator.scope       = scope::create(context.alloc);
     generator.llvm_module = context.modules.get(context.current_file)!!;
@@ -92,10 +93,10 @@ fn void generate_constants(Generator* generator, CompileContext* context, Node* 
         if (!info.llvm_value) {
             LLVMValueRef llvm_value = generate_node(generator, context, info.node.const_node.value, (void*)info.llvm_type);
 
-            info.llvm_value = llvm::add_global(generator.llvm_module, info.llvm_type, (CChar*)info.name.ptr);
+            info.llvm_value = llvm::add_global(generator.llvm_module, info.llvm_type, (CChar*)qualified_name.ptr);
             llvm::set_initializer(info.llvm_value, llvm_value);
             llvm::set_global_constant(info.llvm_value, llvm::TRUE);
-            llvm::set_linkage(info.llvm_value, LLVMLinkage.PRIVATE_LINKAGE);
+            llvm::set_linkage(info.llvm_value, LLVMLinkage.EXTERNAL_LINKAGE);
         }
 
         scope::add_variable(generator.scope, context.alloc, name, info.node, info.llvm_type, info.llvm_value);
@@ -573,7 +574,7 @@ fn LLVMValueRef generate_access(Generator* generator, CompileContext* context, N
         DString full_name;
         full_name.tinit();
 
-        String function_name;
+        String qualified_name;
 
         Node* next = node;
         Node* last = null;
@@ -587,7 +588,13 @@ fn LLVMValueRef generate_access(Generator* generator, CompileContext* context, N
                 next = next.access_node.next;
             case NodeType.CALL:
                 full_name.append(next.call_node.name.ident_node.name);
-                function_name = next.call_node.name.ident_node.name;
+                qualified_name = next.call_node.name.ident_node.name;
+
+                last = next;
+                next = null;
+            case NodeType.IDENT:
+                full_name.append(next.ident_node.name);
+                qualified_name = next.ident_node.name;
 
                 last = next;
                 next = null;
@@ -596,7 +603,7 @@ fn LLVMValueRef generate_access(Generator* generator, CompileContext* context, N
             }
         }
 
-        String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+        String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", qualified_name));
         String resolved_module   = scope::get_import(generator.scope, short_module_name);
 
         if (resolved_module == "") {
@@ -607,7 +614,7 @@ fn LLVMValueRef generate_access(Generator* generator, CompileContext* context, N
         resolved_full_name.tinit();
         resolved_full_name.append(resolved_module);
         resolved_full_name.append(".");
-        resolved_full_name.append(function_name);
+        resolved_full_name.append(qualified_name);
 
         switch (last.type) {
         case NodeType.CALL:
@@ -679,6 +686,16 @@ fn LLVMValueRef generate_access(Generator* generator, CompileContext* context, N
                 (CUInt)arguments.len(),
                 ""
             );
+        case NodeType.IDENT:
+            ConstInfo* const_info = lookup::get_const_info(context, resolved_full_name.str_view());
+            String     const_name = resolved_full_name.copy_str(context.alloc);
+
+            LLVMValueRef local_global = llvm::get_named_global(generator.llvm_module, (CChar*)const_name.ptr);
+            if (local_global == null) {
+                local_global = llvm::add_global(generator.llvm_module, const_info.llvm_type, (CChar*)const_name.ptr);
+            }
+
+            return llvm::build_load_2(generator.llvm_builder, const_info.llvm_type, local_global, "");
         default:
             highlighter::panic();
         }

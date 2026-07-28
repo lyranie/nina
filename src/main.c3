@@ -6,6 +6,7 @@ import std::io;
 import std::os;
 import std::time;
 import std::thread;
+import std::collections::list;
 
 fn void main(String[] argv)
 {
@@ -90,16 +91,28 @@ fn void compile(CompileContext* context) {
         profiler::commit(context.profiler, "Analyser");
         Analyser* analyser = analyser::create(context, path);
         analyser::analyse(analyser, context);
+        analyser::free(analyser, context.alloc);
+    }
+
+    List{Generator*} generators;
+    generators.tinit();
+
+    foreach (String file : context.args.files) {
+        String path = file.to_tpath().absolute(context.alloc).copy(context.alloc)!!;
+        context.current_file = path;
 
         profiler::commit(context.profiler, "Generator");
         Generator* generator = generator::create(context);
-        generator::generate(generator, context);
+        generator::generate_constants(generator, context, context.trees.get(context.current_file)!!);
+        generators.push(generator);
+    }
 
-        profiler::commit(context.profiler, "Cleanup");
+    foreach (Generator* generator : generators) {
+        context.current_file   = generator.file;
+        context.current_module = generator.module_name;
 
-        // TODO: free nodes
-        // parser::free(parser, context.alloc);
-        analyser::free(analyser, context.alloc);
+        generator::generate_node(generator, context, context.trees.get(context.current_file)!!);
+        generator::emit(generator, context);
         generator::free(generator, context);
     }
 

@@ -1,25 +1,13 @@
 mod test.main;
 
-use std.core.stub;
-use std.io.file;
+use std.core.math;
 use std.io;
 
+use libc;
+
 int main(int argc, char** argv) {
-    String[] args = stub.argv_to_args(argc, argv);
-
-    if (args.len == 1) {
-        io.print("Usage: ");
-        io.print(args[0]);
-        io.printn(" <file>");
-        ret -1;
-    }
-
-    io.printn(file.read_text(args[1]));
-
-    int i = 0;
-    while (i < argc) {
-        io.printn(args[i++]);
-    }
+    io.printn(math.PI);
+    libc.printf("%.15f\n", math.PI);
 
     ret 0;
 }

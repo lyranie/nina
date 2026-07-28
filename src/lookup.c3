@@ -157,6 +157,14 @@ fn FunctionInfo* get_function_info(CompileContext* context, String name) {
     return context.registry.functions.get(qualified_name) ?? null;
 }
 
+fn ConstInfo* get_const_info(CompileContext* context, String name) {
+    String qualified_name = name.contains(".")
+        ? name
+        : string::tformat("%s.%s", context.current_module, name);
+
+    return context.registry.constants.get(qualified_name) ?? null;
+}
+
 // potentially remove type_group alltogether
 fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generator* generator = null) {
     switch (node.type) {
@@ -322,10 +330,25 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
                     FunctionInfo* function_info = get_function_info(context, call_name);
 
                     return get(context, function_info.node, scope, generator);
-                default:
+                case NodeType.ACCESS:
                     full_name.append(next.access_node.name.ident_node.name);
 
                     next = next.access_node.next;
+                case NodeType.IDENT:
+                    String const_name        = next.ident_node.name;
+                    String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", const_name));
+                    String resolved_module;
+
+                    if (scope::has_import(scope, short_module_name)) {
+                        resolved_module = scope::get_import(scope, short_module_name);
+                    }
+
+                    String     call_name  = string::format(context.alloc, "%s.%s", resolved_module, const_name);
+                    ConstInfo* const_info = get_const_info(context, call_name);
+
+                    return get(context, const_info.node, scope, generator);
+                default:
+                    highlighter::panic();
                 }
             }
 

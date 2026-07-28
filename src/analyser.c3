@@ -369,7 +369,7 @@ fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) 
         DString full_name;
         full_name.tinit();
 
-        String function_name;
+        String qualified_name;
 
         Node* next = node;
         while (next) {
@@ -381,7 +381,13 @@ fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) 
                 next = next.access_node.next;
             case NodeType.CALL:
                 full_name.append(next.call_node.name.ident_node.name);
-                function_name = next.call_node.name.ident_node.name;
+                qualified_name = next.call_node.name.ident_node.name;
+
+                next = null;
+            case NodeType.IDENT:
+                // constant
+                full_name.append(next.ident_node.name);
+                qualified_name = next.ident_node.name;
 
                 next = null;
             default:
@@ -389,7 +395,7 @@ fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) 
             }
         }
 
-        String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", function_name));
+        String short_module_name = full_name.str_view().strip_suffix(string::tformat(".%s", qualified_name));
         String resolved_module   = scope::get_import(analyser.scope, short_module_name);
 
         if (resolved_module == "") {
@@ -400,7 +406,7 @@ fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) 
         resolved_full_name.tinit();
         resolved_full_name.append(resolved_module);
         resolved_full_name.append(".");
-        resolved_full_name.append(function_name);
+        resolved_full_name.append(qualified_name);
 
         next = node;
         while (next) {
@@ -408,16 +414,22 @@ fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) 
             case NodeType.ACCESS:
                 next = next.access_node.next;
             case NodeType.CALL:
+                if (!context.registry.functions.has_key(resolved_full_name.str_view())) {
+                    highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", qualified_name, resolved_module);
+                }
+
                 handle_call(analyser, context, next, resolved_full_name.str_view(), resolved_module, lookup::get_function_info(context, resolved_full_name.str_view()));
+
+                next = null;
+            case NodeType.IDENT:
+                if (!context.registry.constants.has_key(resolved_full_name.str_view())) {
+                    highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find const '%s' in module '%s'", qualified_name, resolved_module);
+                }
 
                 next = null;
             default:
                 highlighter::panic();
             }
-        }
-
-        if (!context.registry.functions.has_key(resolved_full_name.str_view())) {
-            highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find function '%s' in module '%s'", function_name, resolved_module);
         }
 
         return;
