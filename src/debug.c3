@@ -113,7 +113,12 @@ fn void set_location(Generator* generator, CompileContext* context, int line, in
         return;
     }
 
-    LLVMValueRef    llvm_function_value = llvm::get_basic_block_parent(llvm::get_insert_block(generator.llvm_builder));
+    LLVMBasicBlockRef llvm_block = llvm::get_insert_block(generator.llvm_builder);
+    if (!llvm_block) {
+        return;
+    }
+
+    LLVMValueRef    llvm_function_value = llvm::get_basic_block_parent(llvm_block);
     LLVMMetadataRef llvm_subprogram     = llvm::get_subprogram(llvm_function_value);
     LLVMMetadataRef llvm_debug_location = llvm::di_builder_create_debug_location(
         llvm::get_global_context(),

@@ -70,8 +70,38 @@ fn Generator* create(CompileContext* context) {
 }
 
 fn void generate(Generator* generator, CompileContext* context) {
-    generate_node(generator, context, context.trees.get(context.current_file))!!;
+    Node* ast = context.trees.get(context.current_file)!!;
+
+    generate_constants(generator, context, ast);
+    generate_node(generator, context, ast);
     emit(generator, context);
+}
+
+fn void generate_constants(Generator* generator, CompileContext* context, Node* node) {
+    switch (node.type) {
+    case NodeType.MOD:
+        foreach (Node* statement : node.mod_node.statements) {
+            generate_constants(generator, context, statement);
+        }
+    case NodeType.CONST:
+        String name           = node.const_node.name.ident_node.name;
+        String module_name    = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
+        String qualified_name = string::format(context.alloc, "%s.%s", module_name, name);
+
+        ConstInfo* info = context.registry.constants.get(qualified_name)!!;
+        if (!info.llvm_value) {
+            LLVMValueRef llvm_value = generate_node(generator, context, info.node.const_node.value, (void*)info.llvm_type);
+
+            info.llvm_value = llvm::add_global(generator.llvm_module, info.llvm_type, (CChar*)info.name.ptr);
+            llvm::set_initializer(info.llvm_value, llvm_value);
+            llvm::set_global_constant(info.llvm_value, llvm::TRUE);
+            llvm::set_linkage(info.llvm_value, LLVMLinkage.PRIVATE_LINKAGE);
+        }
+
+        scope::add_variable(generator.scope, context.alloc, name, info.node, info.llvm_type, info.llvm_value);
+    default:
+        break;
+    }
 }
 
 fn void* generate_node(Generator* generator, CompileContext* context, Node* node, void* data = null) {
@@ -490,11 +520,6 @@ fn LLVMValueRef generate_ident(Generator* generator, CompileContext* context, No
 
     if (node.ident_node.name.starts_with("$$")) {
         return get_builtin(context, node.ident_node.name);
-    }
-
-    if (!variable_info) {
-        ConstInfo* const_info = get_or_declare_const(generator, context, node.ident_node.name);
-        return llvm::build_load_2(generator.llvm_builder, const_info.llvm_type, const_info.llvm_value, "");
     }
 
     return llvm::build_load_2(generator.llvm_builder, variable_info.llvm_type, variable_info.llvm_value, "");
@@ -1730,28 +1755,6 @@ fn LLVMValueRef generate_slice(Generator* generator, CompileContext* context, No
     return slice_value;
 }
 
-fn LLVMValueRef generate_const(Generator* generator, CompileContext* context, Node* node) {
-    String      name      = node.const_node.name.path_node.path;
-    LLVMTypeRef llvm_type = lookup::get(context, node, generator.scope, generator).llvm_type;
-
-    debug::set_location(generator, context, node.range.from.line, node.range.from.column);
-
-    LLVMValueRef llvm_alloca = llvm::build_alloca(generator.llvm_builder, llvm_type, (CChar*)name.ptr);
-    
-    if (node.variable_node.value) {
-        LLVMValueRef llvm_value = generate_node(generator, context, node.variable_node.value, (void*)llvm_type);
-        llvm::build_store(generator.llvm_builder, llvm_value, llvm_alloca);
-    } else {
-        if (lookup::get(context, node, generator.scope, generator).type_group == "pointer") {
-            llvm::build_store(generator.llvm_builder, llvm::const_null(llvm_type), llvm_alloca);
-        }
-    }
-
-    scope::add_variable(generator.scope, context.alloc, name, node, llvm_type, llvm_alloca);
-
-    return llvm_alloca;
-}
-
 fn LLVMValueRef get_or_declare_function(Generator* generator, CompileContext* context, FunctionInfo* function_info) {
     String name;
 
@@ -1776,23 +1779,6 @@ fn LLVMValueRef get_or_declare_function(Generator* generator, CompileContext* co
     }
 
     return llvm::add_function(generator.llvm_module, (CChar*)name.ptr, function_info.llvm_type);
-}
-
-fn ConstInfo* get_or_declare_const(Generator* generator, CompileContext* context, String name) {
-    String module_name    = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
-    String qualified_name = string::format(context.alloc, "%s.%s", module_name, name);
-
-    ConstInfo* info = context.registry.constants.get(qualified_name)!!;
-    if (!info.llvm_value) {
-        LLVMValueRef llvm_value = generate_node(generator, context, info.node.const_node.value, (void*)info.llvm_type);
-
-        info.llvm_value = llvm::add_global(generator.llvm_module, info.llvm_type, (CChar*)info.name.ptr);
-        llvm::set_initializer(info.llvm_value, llvm_value);
-        llvm::set_global_constant(info.llvm_value, llvm::TRUE);
-        llvm::set_linkage(info.llvm_value, LLVMLinkage.PRIVATE_LINKAGE);
-    }
-
-    return info;
 }
 
 fn LLVMValueRef build_string_eq(Generator* generator, CompileContext* context, LLVMValueRef lhs, LLVMValueRef rhs) {

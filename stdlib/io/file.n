@@ -116,9 +116,7 @@ String read_text(String path) {
     libc.memset(buffer + total, 0, 1);
     close(file);
 
-    String result = buffer[0:total] as String;
-    libc.free(buffer);
-    ret result;
+    ret buffer[0:total] as String;
 }
 
 long write_text(String path, String data) {
