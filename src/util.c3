@@ -185,3 +185,21 @@ extern fn void initialize_x86_target_mc()    @cname("LLVMInitializeX86TargetMC")
 extern fn void initialize_x86_asm_printer()  @cname("LLVMInitializeX86AsmPrinter");
 extern fn void initialize_x86_asm_parser()   @cname("LLVMInitializeX86AsmParser");
 extern fn void initialize_x86_disassembler() @cname("LLVMInitializeX86Disassembler");
+
+module std::core::string;
+
+fn bool String.is_upper(&self)
+{
+    foreach (c : self)
+    {
+        if (c == '_') {
+            continue;
+        }
+
+        if (c < 'A' || c > 'Z') {
+            return false;
+        }
+    }
+
+    return true;
+}

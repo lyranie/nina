@@ -6,8 +6,11 @@
 - [x] clean up access generator logic
 - [x] implement slices
 - [ ] finish implementing interfaces
-- [ ] add usage tracking for variables and functions
+- [x] add usage tracking for variables
+- [ ] add usage tracking for functions
+- [ ] add usage tracking for constants
 - [ ] fix error highlighting
 - [x] fix anytype for pointers
 - [ ] update error messages to be clearer
 - [ ] add handle_call for generator; copy from analyser
+- [ ] exclude all modules from generation that are never used in the import chain

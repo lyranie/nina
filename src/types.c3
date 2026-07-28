@@ -46,7 +46,7 @@ struct CompileContext {
     Registry*                      registry;
     HashMap{String, Node*}         trees;
     HashMap{String, LLVMModuleRef} modules;
-    LLVMContextRef*                llvm_context;
+    LLVMContextRef                 llvm_context;
 }
 
 struct Range {
@@ -105,6 +105,7 @@ enum TokenType {
     KW_DEFAULT,
     KW_BREAK,
     KW_TRAP,
+    KW_CONST,
 
     SEMI,
     LPAREN,
@@ -299,6 +300,11 @@ struct Node {
             Node* index;
             Node* offset;
         }
+        struct const_node {
+            Node* type;
+            Node* name;
+            Node* value;
+        }
     }
 }
 
@@ -341,6 +347,7 @@ enum NodeType {
     ARRAY,
     TRAP,
     SLICE,
+    CONST,
 }
 
 struct FunctionSignature {
@@ -353,6 +360,7 @@ struct Registry {
     HashMap{String, FunctionInfo*} functions;
     HashMap{String, TypeInfo*}     types;
     HashMap{String, LLVMValueRef}  type_ids;
+    HashMap{String, ConstInfo*}    constants;
 }
 
 struct Analyser {
@@ -392,6 +400,14 @@ struct TypeInfo {
     String       file;
     Node*        node;
     TypeInfo*    base;
+    LLVMTypeRef  llvm_type;
+    LLVMValueRef llvm_value;
+}
+
+struct ConstInfo {
+    String       name;
+    String       mod;
+    Node*        node;
     LLVMTypeRef  llvm_type;
     LLVMValueRef llvm_value;
 }

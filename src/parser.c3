@@ -37,11 +37,12 @@ fn void parse_mod(Parser* parser, CompileContext* context, Lexer* lexer) {
 
     while (parser.current.type != TokenType.EOF) {
         switch (parser.current.type) {
-        case TokenType.IDENT:   statements.push(parse_function(parser, context, lexer));
-        case TokenType.KW_EXT:  statements.push(parse_ext(parser, context, lexer));
-        case TokenType.KW_USE:  statements.push(parse_use(parser, context, lexer));
-        case TokenType.KW_TYPE: statements.push(parse_struct(parser, context, lexer));
-        case TokenType.KW_BASE: statements.push(parse_base(parser, context, lexer));
+        case TokenType.IDENT:    statements.push(parse_function(parser, context, lexer));
+        case TokenType.KW_EXT:   statements.push(parse_ext(parser, context, lexer));
+        case TokenType.KW_USE:   statements.push(parse_use(parser, context, lexer));
+        case TokenType.KW_TYPE:  statements.push(parse_struct(parser, context, lexer));
+        case TokenType.KW_BASE:  statements.push(parse_base(parser, context, lexer));
+        case TokenType.KW_CONST: statements.push(parse_const(parser, context, lexer));
         default:
             highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
         }
@@ -987,6 +988,29 @@ fn Node* parse_cast(Parser* parser, CompileContext* context, Lexer* lexer, Node*
     }
 
     return node;
+}
+
+fn Node* parse_const(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.KW_CONST);
+
+    Node* type = parse_type(parser, context, lexer);
+    Node* name = parse_identifier(parser, context, lexer);
+
+    consume(parser, context, lexer, TokenType.EQUALS);
+
+    Node* value = parse_expr(parser, context, lexer);
+
+    consume(parser, context, lexer, TokenType.SEMI);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.CONST, start, end; node) {
+        node.const_node.type  = type;
+        node.const_node.name  = name;
+        node.const_node.value = value;
+    };
 }
 
 fn void consume(Parser* parser, CompileContext* context, Lexer* lexer, TokenType type) {

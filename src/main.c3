@@ -10,8 +10,6 @@ import std::thread;
 fn void main(String[] argv)
 {
     @todo("mark type narrowing as error without explicit cast");
-    @todo("add reflection");
-    @todo("add type widening");
 
     CompileContext* context = core::context_create();
 
@@ -61,6 +59,7 @@ fn void compile(CompileContext* context) {
         String path = file.to_tpath().absolute(context.alloc).copy(context.alloc)!!;
         context.current_file = path;
 
+        registry::register(context);
         registry::register_types(context, context.trees.get(context.current_file))!!;
     }
 
@@ -76,6 +75,13 @@ fn void compile(CompileContext* context) {
         context.current_file = path;
 
         registry::register_functions(context, context.trees.get(context.current_file))!!;
+    }
+
+    foreach (String file : context.args.files) {
+        String path = file.to_tpath().absolute(context.alloc).copy(context.alloc)!!;
+        context.current_file = path;
+
+        registry::register_constants(context, context.trees.get(context.current_file))!!;
     }
 
     foreach (String file : context.args.files) {

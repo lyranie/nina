@@ -69,6 +69,10 @@ fn bool compare_type(CompileContext* context, Node* node, Node* other, Scope* sc
         return true;
     }
 
+    if (node_data.type_name == "char*" && other_data.type_name == "String" && other.type == NodeType.STRING) {
+        return true;
+    }
+
     return false;
 }
 
@@ -217,7 +221,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             type_group = "pointer";
         case LLVMTypeKind.STRUCT_TYPE_KIND:
             if (!node.type_node.suffix.ends_with("[]")) {
-                type_group = "struct";
+                type_group = name == "String" && type_suffix == "" ? "string" : "struct";
             }
         case LLVMTypeKind.ARRAY_TYPE_KIND:
             type_group = "array";
@@ -236,6 +240,13 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
 
         if (name.starts_with("$$")) {
             return get_builtin(context, name, generator);
+        }
+
+        if (!variable_info) {
+            String mod_name  = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
+            String qualified = string::format(context.alloc, "%s.%s", mod_name, name);
+            ConstInfo* const_info = context.registry.constants.get(qualified)!!;
+            return get(context, const_info.node, scope, generator);
         }
 
         Node* variable = variable_info.node;
@@ -402,7 +413,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
         LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
         String          type_name       = "String";
-        String          type_group      = "pointer";
+        String          type_group      = "string";
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
     case NodeType.RET:
@@ -595,11 +606,12 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             elem_type_name = target_data.type_name[:target_data.type_name.len - 1];
         }
 
-        TypeInfo* type_info = get_type_info(context, elem_type_name);
+        String slice_type_name = string::format(context.alloc, "%s[]", elem_type_name);
+        TypeInfo* type_info = get_type_info(context, slice_type_name);
 
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
         LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
-        String          type_name       = string::format(context.alloc, "%s[]", elem_type_name);
+        String          type_name       = slice_type_name;
         String          type_group      = "pointer";
 
         return { llvm_type, llvm_debug_type, type_name, type_group };
@@ -616,6 +628,8 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         default:
             return get(context, node.suffix_node.node, scope, generator);
         }
+    case NodeType.CONST:
+        return get(context, node.const_node.type, scope, generator);
     default:
         highlighter::panic("Missing lookup::get case for type '%s'", node.type);
     }

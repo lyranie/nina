@@ -19,17 +19,11 @@ fn Registry* create(Allocator alloc) {
     return registry;
 }
 
-fn void register_types(CompileContext* context, Node* node) {
+fn void register(CompileContext* context) {
     String        mod         = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
     LLVMModuleRef llvm_module = llvm::module_create_with_name((CChar*)mod.ptr);
 
     context.modules.set(context.current_file, llvm_module);
-
-    _register_types(context, node);
-}
-
-fn void register_functions(CompileContext* context, Node* node) {
-    _register_functions(context, node);
 }
 
 fn void register_struct_bodies(CompileContext* context, Node* node) {
@@ -62,14 +56,14 @@ fn void register_struct_bodies(CompileContext* context, Node* node) {
     }
 }
 
-fn void _register_types(CompileContext* context, Node* node) {
+fn void register_types(CompileContext* context, Node* node) {
     switch (node.type) {
     case NodeType.STRUCT:
         String mod_name  = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
         String type_name = node.struct_node.name.ident_node.name;
         String name      = string::format(context.alloc, "%s.%s", mod_name, type_name);
 
-        LLVMTypeRef llvm_struct_type = llvm::struct_create_named(context.llvm_context, (CChar*)name.ptr);
+        LLVMTypeRef llvm_struct_type = llvm::struct_create_named(llvm::get_global_context(), (CChar*)name.ptr);
 
         TypeInfo* type_info = alloc::new(context.alloc, TypeInfo);
         type_info.name       = type_name;
@@ -88,7 +82,7 @@ fn void _register_types(CompileContext* context, Node* node) {
     }
 }
 
-fn void _register_functions(CompileContext* context, Node* node) {
+fn void register_functions(CompileContext* context, Node* node) {
     switch (node.type) {
     case NodeType.FUNCTION:
         String mod_name = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
@@ -189,6 +183,37 @@ fn void _register_functions(CompileContext* context, Node* node) {
     case NodeType.MOD:
         foreach (Node* statement : node.mod_node.statements) {
             register_functions(context, statement);
+        }
+    default:
+        break;
+    }
+}
+
+fn void register_constants(CompileContext* context, Node* node) {
+    switch (node.type) {
+    case NodeType.CONST:
+        String mod_name   = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
+        String const_name = node.const_node.name.ident_node.name;
+        String name       = string::format(context.alloc, "%s.%s", mod_name, const_name);
+        String type_name  = node.const_node.type.type_node.name.path_node.path;
+
+        TypeInfo* type_info = lookup::get_type_info(context, type_name);
+        if (!type_info) {
+            highlighter::error(context, context.current_file, node.const_node.type.range.from, node.const_node.type.range.to, "Could not find type '%s'", node.const_node.type.type_node.name.path_node.path);
+        }
+
+        LLVMTypeRef  llvm_type  = lookup::get_type_info(context, type_name).llvm_type;
+
+        ConstInfo* const_info = alloc::new(context.alloc, ConstInfo);
+        const_info.name       = const_name;
+        const_info.mod        = mod_name;
+        const_info.node       = node;
+        const_info.llvm_type  = llvm_type;
+
+        context.registry.constants.set(name, const_info);
+    case NodeType.MOD:
+        foreach (Node* statement : node.mod_node.statements) {
+            register_constants(context, statement);
         }
     default:
         break;

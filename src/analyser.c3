@@ -66,6 +66,7 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
     case NodeType.TRAP:        break;
     case NodeType.CAST:        analyse_cast(analyser, context, node);
     case NodeType.SLICE:       analyse_slice(analyser, context, node);
+    case NodeType.CONST:       analyse_const(analyser, context, node);
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -288,7 +289,7 @@ fn void analyse_variable(Analyser* analyser, CompileContext* context, Node* node
         VariableInfo* prev = scope::get_variable(analyser.scope, name);
         
         highlighter::note(context, context.current_file, prev.node.range.from, prev.node.range.to, "Previous definition was here");
-        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Variable '%s' already defined", name);
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "'%s' already defined", name);
     }
 
     scope::add_variable(analyser.scope, context.alloc, name, node);
@@ -841,6 +842,10 @@ fn void analyse_cast(Analyser* analyser, CompileContext* context, Node* node) {
         valid = true;
     }
 
+    if (from.type_name == "char[]" && to.type_name == "String") {
+        valid = true;
+    }
+
     if (from.type_name == to.type_name) {
         valid = true;
     }
@@ -871,6 +876,42 @@ fn void analyse_slice(Analyser* analyser, CompileContext* context, Node* node) {
 
     if (offset.type_group != "integer") {
         highlighter::error(context, context.current_file, node.slice_node.offset.range.from, node.slice_node.offset.range.to, "Offset must be of type integer, got '%s'", offset.type_name);
+    }
+}
+
+fn void analyse_const(Analyser* analyser, CompileContext* context, Node* node) {
+    analyse_node(analyser, context, node.variable_node.type);
+
+    String name = node.variable_node.name.ident_node.name;
+
+    if (name.starts_with("$")) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Constant names may not start with '$'");
+    }
+
+    if (!name.is_upper()) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Constant names must be all uppercase");
+    }
+
+    if (lookup::get_type_info(context, name)) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Constant names may not be type names");
+    }
+
+    if (scope::has_variable(analyser.scope, name)) {
+        VariableInfo* prev = scope::get_variable(analyser.scope, name);
+        
+        highlighter::note(context, context.current_file, prev.node.range.from, prev.node.range.to, "Previous definition was here");
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "'%s' already defined", name);
+    }
+
+    scope::add_variable(analyser.scope, context.alloc, name, node);
+
+    analyse_node(analyser, context, node.const_node.value);
+
+    if (!lookup::compare_type(context, node, node.const_node.value, analyser.scope)) {
+        String const_type = lookup::get(context, node, analyser.scope).type_name;
+        String value_type = lookup::get(context, node.const_node.value, analyser.scope).type_name;
+
+        highlighter::error(context, context.current_file, node.const_node.value.range.from, node.const_node.value.range.to, "Expected type '%s', got '%s'", const_type, value_type);
     }
 }
 

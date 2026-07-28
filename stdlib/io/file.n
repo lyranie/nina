@@ -5,71 +5,46 @@ use libc;
 
 type File(int fd);
 
-int O_RDONLY() { ret 0; }
-int O_WRONLY() { ret 1; }
-int O_RDWR()   { ret 2; }
-int O_CREAT()  { ret 64; }
-int O_TRUNC()  { ret 512; }
-int O_APPEND() { ret 1024; }
+const int O_RDONLY = 0;
+const int O_WRONLY = 1;
+const int O_RDWR   = 2;
+const int O_CREAT  = 64;
+const int O_TRUNC  = 512;
+const int O_APPEND = 1024;
 
-int SEEK_SET() { ret 0; }
-int SEEK_CUR() { ret 1; }
-int SEEK_END() { ret 2; }
+const int SEEK_SET = 0;
+const int SEEK_CUR = 0;
+const int SEEK_END = 0;
 
-int DEFAULT_MODE() { ret 420; }
+const int DEFAULT_MODE = 420;
 
 int errno() {
     ret *libc.__errno_location();
 }
 
-int mode_to_flags(str mode) {
-    if (string.equals(mode, string.create("r"))) {
-        ret O_RDONLY();
+int mode_to_flags(String mode) {
+    switch (mode) {
+    case "r":  ret O_RDONLY;
+    case "r+": ret O_RDWR;
+    case "w":  ret O_WRONLY + O_CREAT + O_TRUNC;
+    case "w+": ret O_RDWR + O_CREAT + O_APPEND;
+    case "a":  ret O_WRONLY + O_CREAT + O_APPEND;
+    case "a+": ret O_RDWR + O_CREAT + O_APPEND;
+    case "rb": ret O_RDONLY;
+    case "wb": ret O_WRONLY + O_CREAT + O_TRUNC;
+    case "ab": ret O_WRONLY + O_CREAT + O_APPEND;
+    default:   ret -1;
     }
-
-    if (string.equals(mode, string.create("r+"))) {
-        ret O_RDWR();
-    }
-
-    if (string.equals(mode, string.create("w"))) {
-        ret O_WRONLY() + O_CREAT() + O_TRUNC();
-    }
-
-    if (string.equals(mode, string.create("w+"))) {
-        ret O_RDWR() + O_CREAT() + O_TRUNC();
-    }
-
-    if (string.equals(mode, string.create("a"))) {
-        ret O_WRONLY() + O_CREAT() + O_APPEND();
-    }
-
-    if (string.equals(mode, string.create("a+"))) {
-        ret O_RDWR() + O_CREAT() + O_APPEND();
-    }
-
-    if (string.equals(mode, string.create("rb"))) {
-        ret O_RDONLY();
-    }
-
-    if (string.equals(mode, string.create("wb"))) {
-        ret O_WRONLY() + O_CREAT() + O_TRUNC();
-    }
-
-    if (string.equals(mode, string.create("ab"))) {
-        ret O_WRONLY() + O_CREAT() + O_APPEND();
-    }
-
-    ret -1;
 }
 
-File open(char* path, char* mode) {
-    int flags = mode_to_flags(string.create(mode));
+File open(String path, String mode) {
+    int flags = mode_to_flags(mode);
 
     if (flags == -1) {
         ret new File(-1);
     }
 
-    int fd = libc.open(path, flags, DEFAULT_MODE());
+    int fd = libc.open(path.ptr, flags, DEFAULT_MODE);
 
     ret new File(fd);
 }
@@ -91,33 +66,33 @@ int seek(File file, int offset, int whence) {
 }
 
 int size(File file) {
-    int cur = libc.lseek(file.fd, 0, SEEK_CUR());
+    int cur = libc.lseek(file.fd, 0, SEEK_CUR);
 
     if (cur == -1) {
         ret -1;
     }
 
-    int end = libc.lseek(file.fd, 0, SEEK_END());
+    int end = libc.lseek(file.fd, 0, SEEK_END);
 
     if (end == -1) {
         ret -1;
     }
 
-    libc.lseek(file.fd, cur, SEEK_SET());
+    libc.lseek(file.fd, cur, SEEK_SET);
 
     ret end;
 }
 
-str read_text(char* path) {
+String read_text(String path) {
     File file = open(path, "rb");
     if (file.fd == -1) {
-        ret new str(null, 0);
+        ret "";
     }
 
     int total = size(file);
     if (total == -1) {
         close(file);
-        ret new str(null, 0);
+        ret "";
     }
 
     char* buffer   = libc.malloc(total + 1);
@@ -126,7 +101,7 @@ str read_text(char* path) {
         int n = read(file, buffer + received, total - received);
         if (n <= 0) {
             close(file);
-            ret new str(null, 0);
+            ret "";
         }
 
         received = received + n;
@@ -135,21 +110,21 @@ str read_text(char* path) {
     libc.memset(buffer + total, 0, 1);
     close(file);
 
-    ret new str(buffer, total);
+    ret buffer[0:total] as String;
 }
 
-long write_text(char* path, char* data) {
+long write_text(String path, String data) {
     File file = open(path, "wb");
     if (file.fd == -1) {
-        ret -1;
+        ret -1 as long;
     }
 
     int written = 0;
-    while (written < string.len_char(data)) {
-        long n = write(file, data + written, string.len_char(data) - written);
+    while (written < data.len) {
+        long n = write(file, data.ptr + written, data.len - written);
         if (n <= 0) {
             close(file);
-            ret -1;
+            ret -1 as long;
         }
 
         written = written + n;

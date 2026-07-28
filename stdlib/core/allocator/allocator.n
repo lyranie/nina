@@ -2,8 +2,23 @@ mod std.core.allocator;
 
 use std.core.allocator.arena;
 
+/*
+ * constants can be uninitialized and then assigned a
+ * value later on only once
+ *
+const Allocator heap @private;
+
+Allocator heap() {
+    if (HEAP.$data) {
+        HEAP = new StackAllocator();
+    }
+
+    ret HEAP;
+}
+ */
+
 Arena heap() {
-    ret arena.create(1024 * 64);
+    ret arena.create(64 * 1024);
 }
 
 /*

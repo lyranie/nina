@@ -79,18 +79,18 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
     case NodeType.MOD:                generate_mod(generator, context, node);
     case NodeType.FUNCTION:           generate_function(generator, context, node);
     case NodeType.RET:                generate_ret(generator, context, node, data);
-    case NodeType.INT:         return generate_int(generator, context, node);
+    case NodeType.INT:         return generate_int(generator, context, node, data);
     case NodeType.EXT:                generate_ext(generator, context, node);
     case NodeType.CALL:        return generate_call(generator, context, node);
     case NodeType.BOOL:        return generate_bool(generator, context, node);
-    case NodeType.STRING:      return generate_string(generator, context, node);
+    case NodeType.STRING:      return generate_string(generator, context, node, data);
     case NodeType.BIN:         return generate_bin(generator, context, node, data);
     case NodeType.IDENT:       return generate_ident(generator, context, node);
     case NodeType.VARIABLE:    return generate_variable(generator, context, node);
     case NodeType.USE:                generate_use(generator, context, node);
     case NodeType.ACCESS:      return generate_access(generator, context, node, data);
     case NodeType.UNARY:       return generate_unary(generator, context, node, data);
-    case NodeType.IF:                 generate_if(generator, context, node);
+    case NodeType.IF:                 generate_if(generator, context, node, data);
     case NodeType.STRUCT:             generate_struct(generator, context, node);
     case NodeType.INIT:        return generate_init(generator, context, node);
     case NodeType.REFERENCE:   return generate_reference(generator, context, node, data);
@@ -98,16 +98,17 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
     case NodeType.SUFFIX:      return generate_suffix(generator, context, node);
     case NodeType.ASSIGN:             generate_assign(generator, context, node);
     case NodeType.NULL:        return generate_null(generator, context, node);
-    case NodeType.WHILE:              generate_while(generator, context, node);
+    case NodeType.WHILE:              generate_while(generator, context, node, data);
     case NodeType.REAL:        return generate_real(generator, context, node);
     case NodeType.CHAR:        return generate_char(generator, context, node);
-    case NodeType.SWITCH:             generate_switch(generator, context, node);
+    case NodeType.SWITCH:             generate_switch(generator, context, node, data);
     case NodeType.BREAK:              generate_break(generator, context, node);
     case NodeType.INDEX:       return generate_index(generator, context, node);
     case NodeType.ARRAY:       return generate_array(generator, context, node);
     case NodeType.TRAP:               generate_trap(generator, context, node);
     case NodeType.CAST:        return generate_cast(generator, context, node, data);
     case NodeType.SLICE:       return generate_slice(generator, context, node);
+    case NodeType.CONST:       break;
     default:
         highlighter::panic("Missing generator function for type '%s'", node.type);
     }
@@ -124,6 +125,7 @@ fn void generate_mod(Generator* generator, CompileContext* context, Node* node) 
 fn void generate_function(Generator* generator, CompileContext* context, Node* node) {
     String        name          = node.function_node.name.ident_node.name;
     FunctionInfo* function_info = lookup::get_function_info(context, name);
+    LLVMTypeRef   type          = lookup::get(context, function_info.node.function_node.type, generator.scope, generator).llvm_type;
 
     LLVMTypeRef  llvm_function_type  = function_info.llvm_type;
     LLVMValueRef llvm_function_value = function_info.llvm_value;
@@ -146,6 +148,8 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
     LLVMBasicBlockRef entry = llvm::append_basic_block(llvm_function_value, "entry");
     llvm::position_builder_at_end(generator.llvm_builder, entry);
 
+    debug::set_location(generator, context, node.range.from.line, node.range.from.column);
+
     foreach (CUInt index, Node* parameter : node.function_node.parameters) {
         String       parameter_name       = parameter.parameter_node.name.ident_node.name;
         LLVMTypeRef  llvm_parameter_type  = lookup::get(context, parameter, generator.scope, generator).llvm_type;
@@ -158,7 +162,7 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
         debug::add_parameter(generator, context, parameter, llvm_function_value, llvm_parameter_value, index);
     }
 
-    bool returned = generate_compound(generator, context, node.function_node.statements);
+    bool returned = generate_compound(generator, context, node.function_node.statements, type);
 
     generator.scope = generator.scope.parent;
 
@@ -167,7 +171,9 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
         llvm::build_ret_void(generator.llvm_builder);
     }
 
-    llvm::build_unreachable(generator.llvm_builder);
+    if (!llvm::get_basic_block_terminator(llvm::get_insert_block(generator.llvm_builder))) {
+        llvm::build_unreachable(generator.llvm_builder);
+    }
 }
 
 fn void generate_ret(Generator* generator, CompileContext* context, Node* node, void* data) {
@@ -182,17 +188,14 @@ fn void generate_ret(Generator* generator, CompileContext* context, Node* node, 
     }
 }
 
-fn LLVMValueRef generate_int(Generator* generator, CompileContext* context, Node* node) {
+fn LLVMValueRef generate_int(Generator* generator, CompileContext* context, Node* node, void* data) {
     LLVMTypeRef int_type = context.lookup.get("int").llvm_type!!;
 
     debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
-    // if (data) {
-    //     Node* parameter_type = data;
-    //     if (!parameter_type.parameter_node.vaarg) {
-    //         int_type = lookup::get_llvm_type(context, parameter_type, generator.scope);
-    //     }
-    // }
+    if (data) {
+        int_type = data;
+    }
 
     return create_int(int_type, node.int_node.number.to_uint())!!;
 }
@@ -301,7 +304,7 @@ fn LLVMValueRef generate_bool(Generator* generator, CompileContext* context, Nod
     return llvm::const_int(bool_type, value, llvm::FALSE);
 }
 
-fn LLVMValueRef generate_string(Generator* generator, CompileContext* context, Node* node) {
+fn LLVMValueRef generate_string(Generator* generator, CompileContext* context, Node* node, void* data) {
     debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 
     LLVMValueRef bytes_const  = llvm::const_string((CChar*)node.string_node.string.ptr, node.string_node.string.len, llvm::FALSE);
@@ -312,6 +315,10 @@ fn LLVMValueRef generate_string(Generator* generator, CompileContext* context, N
     llvm::set_global_constant(bytes_global, llvm::TRUE);
     llvm::set_linkage(bytes_global, LLVMLinkage.PRIVATE_LINKAGE);
     llvm::set_unnamed_addr(bytes_global, llvm::TRUE);
+
+    if (data && llvm::get_type_kind((LLVMTypeRef)data) == LLVMTypeKind.POINTER_TYPE_KIND) {
+        return bytes_global;
+    }
 
     LLVMTypeRef  string_type         = context.lookup.get("String").llvm_type!!;
     LLVMValueRef len_const           = llvm::const_int(llvm::int_32_type(), node.string_node.string.len, llvm::FALSE);
@@ -324,9 +331,7 @@ fn LLVMValueRef generate_string(Generator* generator, CompileContext* context, N
     llvm::set_linkage(global, LLVMLinkage.PRIVATE_LINKAGE);
     llvm::set_unnamed_addr(global, llvm::TRUE);
 
-    @todo("revert to returning the String struct once reflection exists for String.ptr");
-    // return global;
-    return bytes_global;
+    return llvm::build_load_2(generator.llvm_builder, string_type, global, "");
 }
 
 fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node* node, void* data) {
@@ -356,6 +361,14 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
             return llvm::build_gep2(generator.llvm_builder, element_type_info.llvm_type, gep_base, &right, 1, "");
         }
 
+        if (llvm::type_of(left) != llvm::type_of(right)) {
+            if (llvm::get_int_type_width(llvm::type_of(left)) < llvm::get_int_type_width(llvm::type_of(right))) {
+                left = llvm::build_s_ext(generator.llvm_builder, left, llvm::type_of(right), "");
+            } else {
+                right = llvm::build_s_ext(generator.llvm_builder, right, llvm::type_of(left), "");
+            }
+        }
+
         return llvm::build_add(generator.llvm_builder, left, right, "");
     case TokenType.MINUS:
         if (type == "pointer") {
@@ -375,6 +388,14 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
             LLVMValueRef neg_right = llvm::build_neg(generator.llvm_builder, right, "");
 
             return llvm::build_gep2(generator.llvm_builder, element_type_info.llvm_type, gep_base, &neg_right, 1, "");
+        }
+
+        if (llvm::type_of(left) != llvm::type_of(right)) {
+            if (llvm::get_int_type_width(llvm::type_of(left)) < llvm::get_int_type_width(llvm::type_of(right))) {
+                left = llvm::build_s_ext(generator.llvm_builder, left, llvm::type_of(right), "");
+            } else {
+                right = llvm::build_s_ext(generator.llvm_builder, right, llvm::type_of(left), "");
+            }
         }
 
         if (type == "real") {
@@ -421,6 +442,14 @@ fn LLVMValueRef generate_bin(Generator* generator, CompileContext* context, Node
             return llvm::build_f_cmp(generator.llvm_builder, pred, left, right, "");
         }
 
+        if (type == "string") {
+            LLVMValueRef eq = build_string_eq(generator, context, left, right);
+            if (node.bin_node.operator.type == TokenType.NOT_EQUAL) {
+                return llvm::build_not(generator.llvm_builder, eq, "");
+            }
+            return eq;
+        }
+
         LLVMTypeRef left_type  = llvm::type_of(left);
         LLVMTypeRef right_type = llvm::type_of(right);
 
@@ -463,6 +492,11 @@ fn LLVMValueRef generate_ident(Generator* generator, CompileContext* context, No
         return get_builtin(context, node.ident_node.name);
     }
 
+    if (!variable_info) {
+        ConstInfo* const_info = get_or_declare_const(generator, context, node.ident_node.name);
+        return llvm::build_load_2(generator.llvm_builder, const_info.llvm_type, const_info.llvm_value, "");
+    }
+
     return llvm::build_load_2(generator.llvm_builder, variable_info.llvm_type, variable_info.llvm_value, "");
 }
 
@@ -488,22 +522,19 @@ fn LLVMValueRef generate_variable(Generator* generator, CompileContext* context,
     return llvm_alloca;
 }
 
-fn bool generate_compound(Generator* generator, CompileContext* context, NodeList statements)
+fn bool generate_compound(Generator* generator, CompileContext* context, NodeList statements, void* data)
 {
     bool returned;
-
-    foreach (int index, Node* statement : statements)
-    {
+    foreach (int index, Node* statement : statements) {
         if (returned) {
             continue;
         }
 
-        if (statement.type == NodeType.RET && index != statements.len() - 1)
-        {
+        if (statement.type == NodeType.RET && index != statements.len() - 1) {
             returned = true;
         }
 
-        generate_node(generator, context, statement);
+        generate_node(generator, context, statement, data);
     }
 
     return returned;
@@ -798,7 +829,7 @@ fn LLVMValueRef generate_unary(Generator* generator, CompileContext* context, No
     switch (node.unary_node.operator.type) {
     case TokenType.MINUS:
         if (lookup::get(context, node, generator.scope, generator).type_group == "integer") {
-            LLVMTypeRef int_type = context.lookup.get("int").llvm_type!!;
+            LLVMTypeRef int_type = data ? (LLVMTypeRef)data : context.lookup.get("int").llvm_type!!;
             
             return llvm::build_mul(generator.llvm_builder, llvm_value, create_int(int_type, -1), "");
         }
@@ -823,7 +854,9 @@ fn LLVMValueRef generate_unary(Generator* generator, CompileContext* context, No
     }
 }
 
-fn void generate_if(Generator* generator, CompileContext* context, Node* node) {
+fn void generate_if(Generator* generator, CompileContext* context, Node* node, void* data) {
+    @todo("create build_condition function");
+
     LLVMValueRef condition = generate_node(generator, context, node.if_node.condition);
 
     LLVMTypeRef condition_type = llvm::type_of(condition);
@@ -871,7 +904,7 @@ fn void generate_if(Generator* generator, CompileContext* context, Node* node) {
 
     llvm::position_builder_at_end(generator.llvm_builder, then_block);
 
-    generate_compound(generator, context, node.if_node.then_statements);
+    generate_compound(generator, context, node.if_node.then_statements, data);
 
     LLVMBasicBlockRef then_end_block = llvm::get_insert_block(generator.llvm_builder);
     if (!llvm::get_basic_block_terminator(then_end_block)) {
@@ -884,7 +917,7 @@ fn void generate_if(Generator* generator, CompileContext* context, Node* node) {
     if (node.if_node.else_if)
     {
         // -- ELSE IF --
-        generate_node(generator, context, node.if_node.else_if);
+        generate_node(generator, context, node.if_node.else_if, data);
 
         LLVMBasicBlockRef else_end_block = llvm::get_insert_block(generator.llvm_builder);
         if (!llvm::get_basic_block_terminator(else_end_block)) {
@@ -895,7 +928,7 @@ fn void generate_if(Generator* generator, CompileContext* context, Node* node) {
         // -- ELSE --
         generator.scope = scope::create(context.alloc, generator.scope);
 
-        generate_compound(generator, context, node.if_node.else_statements);
+        generate_compound(generator, context, node.if_node.else_statements, data);
 
         LLVMBasicBlockRef else_end_block = llvm::get_insert_block(generator.llvm_builder);
         if (!llvm::get_basic_block_terminator(else_end_block)) {
@@ -1083,12 +1116,14 @@ fn LLVMValueRef generate_suffix(Generator* generator, CompileContext* context, N
 
 fn LLVMValueRef generate_assign(Generator* generator, CompileContext* context, Node* node) {
     LLVMValueRef target_ptr;
+    LLVMTypeRef  target_type;
     Node*        target = node.assign_node.node;
 
     if (target.type == NodeType.IDENT) {
         VariableInfo* variable_info = scope::get_variable(generator.scope, target.ident_node.name);
 
-        target_ptr = variable_info.llvm_value;
+        target_ptr  = variable_info.llvm_value;
+        target_type = variable_info.llvm_type;
     } else if (target.type == NodeType.ACCESS) {
         String        name          = target.access_node.name.path_node.path;
         VariableInfo* variable_info = scope::get_variable(generator.scope, name);
@@ -1141,13 +1176,15 @@ fn LLVMValueRef generate_assign(Generator* generator, CompileContext* context, N
                 instance_ptr = field_ptr;
                 base         = field_element;
             } else {
-                target_ptr = field_ptr;
+                target_ptr  = field_ptr;
+                target_type = field_element.llvm_type;
             }
 
             next = after;
         }
     } else if (target.type == NodeType.DEREFERENCE) {
-        target_ptr = generate_node(generator, context, target.dereference_node.node);
+        target_ptr  = generate_node(generator, context, target.dereference_node.node);
+        target_type = lookup::get(context, target.dereference_node.node, generator.scope, generator).llvm_type;
     } else if (target.type == NodeType.INDEX) {
         LLVMValueRef  target_value = generate_node(generator, context, target.index_node.target);
         LookupElement target_data  = lookup::get(context, target.index_node.target, generator.scope, generator);
@@ -1171,13 +1208,25 @@ fn LLVMValueRef generate_assign(Generator* generator, CompileContext* context, N
             data_ptr = target_value;
         }
 
-        target_ptr = llvm::build_gep2(generator.llvm_builder, element_type_info.llvm_type, data_ptr, &index_value, 1, "");
+        target_ptr  = llvm::build_gep2(generator.llvm_builder, element_type_info.llvm_type, data_ptr, &index_value, 1, "");
+        target_type = element_type_info.llvm_type;
     } else {
         highlighter::panic("generate_assign only supports IDENT, ACCESS, DEREFERENCE, and INDEX for now");
     }
 
-    LLVMValueRef value = generate_node(generator, context, node.assign_node.expr, (void*)llvm::type_of(target_ptr) /* or the tracked llvm_type for target */);
-    // LLVMValueRef value = generate_node(generator, context, node.assign_node.expr);
+    LLVMValueRef value = generate_node(generator, context, node.assign_node.expr, (void*)target_type);
+
+    LLVMTypeRef value_type = llvm::type_of(value);
+
+    if (target_type != value_type
+        && llvm::get_type_kind(target_type) == LLVMTypeKind.INTEGER_TYPE_KIND
+        && llvm::get_type_kind(value_type) == LLVMTypeKind.INTEGER_TYPE_KIND) {
+        if (llvm::get_int_type_width(value_type) > llvm::get_int_type_width(target_type)) {
+            value = llvm::build_trunc(generator.llvm_builder, value, target_type, "");
+        } else {
+            value = llvm::build_s_ext(generator.llvm_builder, value, target_type, "");
+        }
+    }
 
     llvm::build_store(generator.llvm_builder, value, target_ptr);
 
@@ -1188,7 +1237,7 @@ fn LLVMValueRef generate_null(Generator* generator, CompileContext* context, Nod
     return llvm::const_null(llvm::pointer_type(llvm::int_8_type(), 0));
 }
 
-fn void generate_while(Generator* generator, CompileContext* context, Node* node) {
+fn void generate_while(Generator* generator, CompileContext* context, Node* node, void* data) {
     LLVMValueRef condition = generate_node(generator, context, node.while_node.expr);
 
     LLVMBasicBlockRef current_block = llvm::get_insert_block(generator.llvm_builder);
@@ -1201,7 +1250,7 @@ fn void generate_while(Generator* generator, CompileContext* context, Node* node
     llvm::position_builder_at_end(generator.llvm_builder, then_block);
 
     generator.scope = scope::create(context.alloc, generator.scope);
-    generate_compound(generator, context, node.while_node.statements);
+    generate_compound(generator, context, node.while_node.statements, data);
     
     LLVMValueRef new_condition = generate_node(generator, context, node.while_node.expr);
     llvm::build_cond_br(generator.llvm_builder, new_condition, then_block, end_block);
@@ -1233,8 +1282,9 @@ fn LLVMValueRef generate_char(Generator* generator, CompileContext* context, Nod
     return llvm::const_int(char_type, (ulong)node.char_node.character[0], llvm::TRUE);
 }
 
-fn void generate_switch(Generator* generator, CompileContext* context, Node* node) {
-    LLVMValueRef subject = generate_node(generator, context, node.switch_node.expr);
+fn void generate_switch(Generator* generator, CompileContext* context, Node* node, void* data) {
+    LLVMValueRef  subject      = generate_node(generator, context, node.switch_node.expr);
+    LookupElement subject_data = lookup::get(context, node.switch_node.expr, generator.scope);
 
     LLVMBasicBlockRef current_block = llvm::get_insert_block(generator.llvm_builder);
     LLVMValueRef      llvm_function = llvm::get_basic_block_parent(current_block);
@@ -1251,7 +1301,12 @@ fn void generate_switch(Generator* generator, CompileContext* context, Node* nod
             llvm::position_builder_at_end(generator.llvm_builder, next_check_block);
 
             LLVMValueRef case_value = generate_node(generator, context, case_node.case_node.expr);
-            LLVMValueRef cmp        = llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_EQ, subject, case_value, "");
+            LLVMValueRef cmp;
+            if (subject_data.type_group == "string") {
+                cmp = build_string_eq(generator, context, subject, case_value);
+            } else {
+                cmp = llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_EQ, subject, case_value, "");
+            }
 
             LLVMBasicBlockRef case_block = llvm::append_basic_block(llvm_function, "");
             LLVMBasicBlockRef else_check_block = llvm::append_basic_block(llvm_function, "");
@@ -1289,7 +1344,7 @@ fn void generate_switch(Generator* generator, CompileContext* context, Node* nod
                 });
             }
 
-            generate_compound(generator, context, case_node.case_node.statements);
+            generate_compound(generator, context, case_node.case_node.statements, data);
 
             LLVMBasicBlockRef case_end_block = llvm::get_insert_block(generator.llvm_builder);
             if (!llvm::get_basic_block_terminator(case_end_block)) {
@@ -1303,7 +1358,7 @@ fn void generate_switch(Generator* generator, CompileContext* context, Node* nod
             llvm::position_builder_at_end(generator.llvm_builder, next_check_block);
 
             generator.scope = scope::create(context.alloc, generator.scope);
-            generate_compound(generator, context, case_node.default_node.statements);
+            generate_compound(generator, context, case_node.default_node.statements, data);
 
             LLVMBasicBlockRef default_end_block = llvm::get_insert_block(generator.llvm_builder);
             if (!llvm::get_basic_block_terminator(default_end_block)) {
@@ -1548,8 +1603,8 @@ fn LLVMValueRef generate_cast(Generator* generator, CompileContext* context, Nod
         return llvm::build_si_to_fp(generator.llvm_builder, value, to.llvm_type, "");
     }
 
-    if ((from.type_group == "integer" || from.type_group == "boolean" || from.type_group == "character") &&
-        (to.type_group   == "integer" || to.type_group   == "boolean" || to.type_group   == "character")) {
+    if ((from.type_group == "integer" || from.type_group == "boolean" || from.type_group == "character" || from.type_group == "long") &&
+        (to.type_group   == "integer" || to.type_group   == "boolean" || to.type_group   == "character" || to.type_group   == "long")) {
         CUInt from_width = llvm::get_int_type_width(from.llvm_type);
         CUInt to_width   = llvm::get_int_type_width(to.llvm_type);
 
@@ -1621,6 +1676,25 @@ fn LLVMValueRef generate_cast(Generator* generator, CompileContext* context, Nod
         return string_value;
     }
 
+    if (from.type_name == "char[]" && to.type_name == "String") {
+        LLVMValueRef slice_slot = llvm::build_alloca(generator.llvm_builder, from.llvm_type, "");
+        llvm::build_store(generator.llvm_builder, value, slice_slot);
+
+        LLVMValueRef ptr_gep = llvm::build_struct_gep2(generator.llvm_builder, from.llvm_type, slice_slot, 0, "");
+        LLVMValueRef len_gep = llvm::build_struct_gep2(generator.llvm_builder, from.llvm_type, slice_slot, 1, "");
+
+        LLVMValueRef slice_ptr = llvm::build_load_2(generator.llvm_builder, llvm::pointer_type(llvm::int_8_type(), 0), ptr_gep, "");
+        LLVMValueRef slice_len = llvm::build_load_2(generator.llvm_builder, llvm::int_32_type(), len_gep, "");
+
+        LLVMTypeRef  string_type  = to.llvm_type;
+        LLVMValueRef string_value = llvm::get_undef(string_type);
+
+        string_value = llvm::build_insert_value(generator.llvm_builder, string_value, slice_ptr, 0, "");
+        string_value = llvm::build_insert_value(generator.llvm_builder, string_value, slice_len, 1, "");
+
+        return string_value;
+    }
+
     highlighter::panic("Unsupported cast from '%s' to '%s'", from.type_name, to.type_name);
 }
 
@@ -1656,6 +1730,28 @@ fn LLVMValueRef generate_slice(Generator* generator, CompileContext* context, No
     return slice_value;
 }
 
+fn LLVMValueRef generate_const(Generator* generator, CompileContext* context, Node* node) {
+    String      name      = node.const_node.name.path_node.path;
+    LLVMTypeRef llvm_type = lookup::get(context, node, generator.scope, generator).llvm_type;
+
+    debug::set_location(generator, context, node.range.from.line, node.range.from.column);
+
+    LLVMValueRef llvm_alloca = llvm::build_alloca(generator.llvm_builder, llvm_type, (CChar*)name.ptr);
+    
+    if (node.variable_node.value) {
+        LLVMValueRef llvm_value = generate_node(generator, context, node.variable_node.value, (void*)llvm_type);
+        llvm::build_store(generator.llvm_builder, llvm_value, llvm_alloca);
+    } else {
+        if (lookup::get(context, node, generator.scope, generator).type_group == "pointer") {
+            llvm::build_store(generator.llvm_builder, llvm::const_null(llvm_type), llvm_alloca);
+        }
+    }
+
+    scope::add_variable(generator.scope, context.alloc, name, node, llvm_type, llvm_alloca);
+
+    return llvm_alloca;
+}
+
 fn LLVMValueRef get_or_declare_function(Generator* generator, CompileContext* context, FunctionInfo* function_info) {
     String name;
 
@@ -1680,6 +1776,81 @@ fn LLVMValueRef get_or_declare_function(Generator* generator, CompileContext* co
     }
 
     return llvm::add_function(generator.llvm_module, (CChar*)name.ptr, function_info.llvm_type);
+}
+
+fn ConstInfo* get_or_declare_const(Generator* generator, CompileContext* context, String name) {
+    String module_name    = context.trees.get(context.current_file).mod_node.path.path_node.path!!;
+    String qualified_name = string::format(context.alloc, "%s.%s", module_name, name);
+
+    ConstInfo* info = context.registry.constants.get(qualified_name)!!;
+    if (!info.llvm_value) {
+        LLVMValueRef llvm_value = generate_node(generator, context, info.node.const_node.value, (void*)info.llvm_type);
+
+        info.llvm_value = llvm::add_global(generator.llvm_module, info.llvm_type, (CChar*)info.name.ptr);
+        llvm::set_initializer(info.llvm_value, llvm_value);
+        llvm::set_global_constant(info.llvm_value, llvm::TRUE);
+        llvm::set_linkage(info.llvm_value, LLVMLinkage.PRIVATE_LINKAGE);
+    }
+
+    return info;
+}
+
+fn LLVMValueRef build_string_eq(Generator* generator, CompileContext* context, LLVMValueRef lhs, LLVMValueRef rhs) {
+    LLVMBuilderRef builder = generator.llvm_builder;
+
+    if (llvm::get_type_kind(llvm::type_of(rhs)) == LLVMTypeKind.POINTER_TYPE_KIND) {
+        rhs = llvm::build_load_2(builder, llvm::type_of(lhs), rhs, "");
+    }
+
+    LLVMValueRef lhs_ptr = llvm::build_extract_value(builder, lhs, 0, "");
+    LLVMValueRef lhs_len = llvm::build_extract_value(builder, lhs, 1, "");
+    LLVMValueRef rhs_ptr = llvm::build_extract_value(builder, rhs, 0, "");
+    LLVMValueRef rhs_len = llvm::build_extract_value(builder, rhs, 1, "");
+
+    LLVMTypeRef i32_type = llvm::int_32_type();
+    LLVMTypeRef i1_type  = llvm::int_1_type();
+    LLVMTypeRef i8_type  = llvm::int_8_type();
+
+    LLVMValueRef len_eq = llvm::build_i_cmp(builder, LLVMIntPredicate.INT_EQ, lhs_len, rhs_len, "");
+
+    LLVMValueRef function = llvm::get_basic_block_parent(llvm::get_insert_block(builder));
+
+    LLVMBasicBlockRef loop_cond = llvm::append_basic_block(function, "streq.cond");
+    LLVMBasicBlockRef loop_body = llvm::append_basic_block(function, "streq.body");
+    LLVMBasicBlockRef mismatch  = llvm::append_basic_block(function, "streq.mismatch");
+    LLVMBasicBlockRef done      = llvm::append_basic_block(function, "streq.done");
+
+    LLVMBasicBlockRef entry_block = llvm::get_insert_block(builder);
+    llvm::build_cond_br(builder, len_eq, loop_cond, mismatch);
+
+    llvm::position_builder_at_end(builder, loop_cond);
+    LLVMValueRef index = llvm::build_phi(builder, i32_type, "");
+    LLVMValueRef in_bounds = llvm::build_i_cmp(builder, LLVMIntPredicate.INT_ULT, index, lhs_len, "");
+    llvm::build_cond_br(builder, in_bounds, loop_body, done);
+
+    llvm::position_builder_at_end(builder, loop_body);
+    LLVMValueRef lhs_elem_ptr = llvm::build_in_bounds_gep2(builder, i8_type, lhs_ptr, &index, 1, "");
+    LLVMValueRef rhs_elem_ptr = llvm::build_in_bounds_gep2(builder, i8_type, rhs_ptr, &index, 1, "");
+    LLVMValueRef lhs_byte     = llvm::build_load_2(builder, i8_type, lhs_elem_ptr, "");
+    LLVMValueRef rhs_byte     = llvm::build_load_2(builder, i8_type, rhs_elem_ptr, "");
+    LLVMValueRef byte_eq      = llvm::build_i_cmp(builder, LLVMIntPredicate.INT_EQ, lhs_byte, rhs_byte, "");
+    LLVMValueRef next_index   = llvm::build_add(builder, index, create_int(i32_type, 1), "");
+    llvm::build_cond_br(builder, byte_eq, loop_cond, mismatch);
+
+    LLVMValueRef[] index_incoming_values  = { create_int(i32_type, 0), next_index };
+    LLVMBasicBlockRef[] index_incoming_blocks = { entry_block, loop_body };
+    llvm::add_incoming(index, index_incoming_values, index_incoming_blocks, 2);
+
+    llvm::position_builder_at_end(builder, mismatch);
+    llvm::build_br(builder, done);
+
+    llvm::position_builder_at_end(builder, done);
+    LLVMValueRef result = llvm::build_phi(builder, i1_type, "");
+    LLVMValueRef[] result_incoming_values  = { create_int(i1_type, 1), create_int(i1_type, 0) };
+    LLVMBasicBlockRef[] result_incoming_blocks = { loop_cond, mismatch };
+    llvm::add_incoming(result, result_incoming_values, result_incoming_blocks, 2);
+
+    return result;
 }
 
 fn LLVMValueRef create_int(LLVMTypeRef int_type, ulong value) {
@@ -1890,6 +2061,14 @@ fn void emit(Generator* generator, CompileContext* context) {
             io::eprintn((ZString)error);
             llvm::dispose_message(error);
         }
+    }
+
+    CChar* verify_error = null;
+    if (llvm::verify_module(generator.llvm_module, LLVMVerifierFailureAction.PRINT_MESSAGE_ACTION, &verify_error) != 0) {
+        io::eprintn((ZString)verify_error);
+        io::eprintfn("module: %s", generator.module_name);
+        llvm::dispose_message(verify_error);
+        os::exit(1);
     }
 
     if (llvm::target_machine_emit_to_file(target_machine, generator.llvm_module, (CChar*)string::format(context.alloc, "out/obj/%s.o", generator.module_name), LLVMCodeGenFileType.OBJECT_FILE, &error))
