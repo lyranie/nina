@@ -1,10 +1,13 @@
 mod test.main;
 
 use std.core.stub;
+use std.io.file;
 use std.io;
 
 int main(int argc, char** argv) {
     String[] args = stub.argv_to_args(argc, argv);
+
+    io.printn(file.read_text(args[0]));
 
     int i = 0;
     while (i < argc) {

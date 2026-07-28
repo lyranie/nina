@@ -95,11 +95,17 @@ String read_text(String path) {
         ret "";
     }
 
-    char* buffer   = libc.malloc(total + 1);
-    int   received = 0;
+    char* buffer = libc.malloc(total + 1);
+    if (!buffer) {
+        close(file);
+        ret "";
+    }
+
+    int received = 0;
     while (received < total) {
         int n = read(file, buffer + received, total - received);
         if (n <= 0) {
+            libc.free(buffer);
             close(file);
             ret "";
         }
@@ -110,7 +116,9 @@ String read_text(String path) {
     libc.memset(buffer + total, 0, 1);
     close(file);
 
-    ret buffer[0:total] as String;
+    String result = buffer[0:total] as String;
+    libc.free(buffer);
+    ret result;
 }
 
 long write_text(String path, String data) {

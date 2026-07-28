@@ -4,10 +4,14 @@ use std.core.string;
 use std.io.file;
 use libc;
 
+const int STDOUT = 1;
+const int STDERR = 2;
+
 void print(any a) {
     switch (a.$typeid) {
     case String.$typeid:
-        libc.printf("%s", a.$data.ptr);
+        String s = a.$data as String;
+        libc.write(STDOUT, s.ptr, s.len);
         break;
     case int.$typeid:
         libc.printf("%d", a.$data as int);
@@ -69,14 +73,6 @@ void print(any a) {
 void printn(any a) {
     print(a);
     libc.printf("\n");
-}
-
-File stdout() {
-    ret new File(1);
-}
-
-File stderr() {
-    ret new File(2);
 }
 
 // -- NEW --

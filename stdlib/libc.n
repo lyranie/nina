@@ -12,3 +12,4 @@ ext int   write(int fd, void* buf, int count);
 ext int   lseek(int fd, int offset, int whence);
 ext int*  __errno_location();
 ext void abort();
+ext void free(void* data);
