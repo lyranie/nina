@@ -44,6 +44,13 @@ fn void register_struct_bodies(CompileContext* context, Node* node) {
         fields.tinit();
 
         foreach (Node* field : node.struct_node.fields) {
+            String    field_type_name = field.parameter_node.type.type_node.name.path_node.path;
+            TypeInfo* field_type_info = lookup::get_type_info(context, field_type_name);
+
+            if (!field_type_info) {
+                highlighter::error(context, context.current_file, field.parameter_node.type.range.from, field.parameter_node.type.range.to, "Could not find type '%s'", field.parameter_node.type.type_node.name.path_node.path);
+            }
+
             fields.push(lookup::get(context, field.parameter_node.type, null).llvm_type);
         }
 
