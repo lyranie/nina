@@ -13,3 +13,4 @@ ext int   lseek(int fd, int offset, int whence);
 ext int*  __errno_location();
 ext void abort();
 ext void free(void* data);
+ext void exit(int code);

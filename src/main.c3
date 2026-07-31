@@ -113,6 +113,9 @@ fn void compile(CompileContext* context) {
 
         generator::generate_node(generator, context, context.trees.get(context.current_file)!!);
         generator::emit(generator, context);
+    }
+
+    foreach (Generator* generator : generators) {
         generator::free(generator, context);
     }
 

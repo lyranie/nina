@@ -215,6 +215,21 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             : node.type_node.suffix.ends_with("[N]")
                 ? "array"
                 : "";
+        // small fix for now; fix in refactor/self-host
+        @todo("find a better way to determine type group");
+        if (type_group == "") {
+            switch (type_name) {
+            case "int":    type_group = "integer";
+            case "long":   type_group = "integer";
+            case "char":   type_group = "character";
+            case "bool":   type_group = "boolean";
+            case "real":   type_group = "real";
+            case "String": type_group = "string";
+            case "void":   type_group = "pointer";
+            case "any":    type_group = "anytype";
+            default:       type_group = "struct";
+            }
+        }
 
         switch (llvm_type_kind) {
         case LLVMTypeKind.INTEGER_TYPE_KIND:
@@ -293,6 +308,20 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
                 String          type_group      = "pointer";
 
                 return { llvm_type, llvm_debug_type, type_name, type_group };
+            }
+
+            if (node.bin_node.operator.type == TokenType.MINUS && left_data.type_group == "pointer") {
+                LookupElement right_data = get(context, node.bin_node.right, scope, generator);
+
+                if (right_data.type_group == "pointer") {
+                    TypeInfo*       type_info       = get_type_info(context, "long");
+                    LLVMTypeRef     llvm_type       = type_info.llvm_type;
+                    LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
+                    String          type_name       = "long";
+                    String          type_group      = "integer";
+
+                    return { llvm_type, llvm_debug_type, type_name, type_group };
+                }
             }
 
             return left_data;
@@ -578,6 +607,8 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         } else if (target_data.type_name.ends_with("]")) {
             sz bracket_pos = target_data.type_name.rindex_of("[")!!;
             new_type_name = target_data.type_name[:bracket_pos];
+        } else if (target_data.type_name == "String") {
+            new_type_name = "char";
         } else {
             new_type_name = target_data.type_name[:target_data.type_name.len - 1];
         }
@@ -625,6 +656,10 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         String elem_type_name;
         if (target_data.type_name.ends_with("[]")) {
             elem_type_name = target_data.type_name[:target_data.type_name.len - 2];
+        } else if (target_data.type_name.ends_with("[N]")) {
+            elem_type_name = target_data.type_name[:target_data.type_name.len - 3];
+        } else if (target_data.type_name == "String") {
+            elem_type_name = "char";
         } else {
             elem_type_name = target_data.type_name[:target_data.type_name.len - 1];
         }
@@ -746,7 +781,7 @@ fn LLVMMetadataRef create_debug_type(CompileContext* context, Generator* generat
 
         for (CUInt i = 0; i < field_count; i++) {
             LLVMTypeRef field_llvm_type = llvm::struct_get_type_at_index(llvm_type, i);
-            LLVMMetadataRef field_debug_type = create_debug_type(context, generator, field_llvm_type);
+            LLVMMetadataRef field_debug_type = create_debug_type(context, generator, field_llvm_type, type_info);
 
             uint field_size_bits;
             switch (llvm::get_type_kind(field_llvm_type)) {
@@ -802,6 +837,32 @@ fn LLVMMetadataRef create_debug_type(CompileContext* context, Generator* generat
         return llvm::di_builder_create_pointer_type(generator.llvm_debug_builder, pointee_debug_type, 64, 0, 0, null, 0);
     case LLVMTypeKind.DOUBLE_TYPE_KIND:
         return llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "real", 4, 64, 5, LLVMDIFlags.DI_FLAG_ZERO);
+    case LLVMTypeKind.ARRAY_TYPE_KIND:
+        LLVMMetadataRef ptr_type = llvm::di_builder_create_pointer_type(generator.llvm_debug_builder, null, 64, 0, 0, null, 0);
+        LLVMMetadataRef len_type = llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "int", 3, 32, 5, LLVMDIFlags.DI_FLAG_ZERO);
+        LLVMMetadataRef[] members = {
+            llvm::di_builder_create_member_type(generator.llvm_debug_builder, null, "char*", 5, generator.llvm_debug_file, 0, 64, 64, 0, LLVMDIFlags.DI_FLAG_ZERO, ptr_type),
+            llvm::di_builder_create_member_type(generator.llvm_debug_builder, null, "len", 3, generator.llvm_debug_file, 0, 32, 32, 64, LLVMDIFlags.DI_FLAG_ZERO, len_type)
+        };
+
+        return llvm::di_builder_create_struct_type(
+            generator.llvm_debug_builder,
+            generator.llvm_debug_file,
+            (CChar*)string::format(context.alloc, "%s[]", type_info.name).ptr,
+            (CUInt)(type_info.name.len + 2),
+            generator.llvm_debug_file,
+            type_info.node ? (CUInt)type_info.node.range.from.line : 0,
+            128,
+            64,
+            LLVMDIFlags.DI_FLAG_ZERO,
+            null,
+            members,
+            2,
+            0,
+            null,
+            "",
+            0
+        );
     default:
         highlighter::panic("Missing create_debug_type case for type kind '%s'", llvm::get_type_kind(llvm_type));
     }
@@ -822,7 +883,7 @@ fn FieldResult get_field(CompileContext* context, Scope* scope, LookupElement ba
     }
 
     @todo("check if group is slice");
-    if (base.type_name.ends_with("[]") || base.type_name == "String") {
+    if (base.type_name.ends_with("[]") || base.type_name.ends_with("[N]") || base.type_name == "String") {
         switch (field_name) {
         case "len": return { .lookup_element = { .type_name = "int", .type_group = "integer" } };
         case "ptr": return { .lookup_element = { .type_name = "char*", .type_group = "pointer" } };
@@ -862,10 +923,6 @@ fn int get_type_size(CompileContext* context, Scope* scope, LookupElement elemen
     case "boolean":
         return 1;
     case "struct":
-        if (element.type_name == "String") {
-            return 16;
-        }
-
         TypeInfo* type_info = get_type_info(context, element.type_name);
         NodeList  fields    = get_type_fields(context, type_info, scope);
 
@@ -876,8 +933,27 @@ fn int get_type_size(CompileContext* context, Scope* scope, LookupElement elemen
         }
 
         return size;
+    case "array":
+        long bracket_pos = element.type_name.rindex_of("[")!!;
+        String element_type_name = element.type_name[:bracket_pos];
+
+        TypeInfo* element_type_info = get_type_info(context, element_type_name);
+
+        LLVMTypeKind element_kind = llvm::get_type_kind(element_type_info.llvm_type);
+        String element_type_group = element_kind == LLVMTypeKind.INTEGER_TYPE_KIND
+            ? (llvm::get_int_type_width(element_type_info.llvm_type) == 1 ? "boolean" : "integer")
+            : element_kind == LLVMTypeKind.POINTER_TYPE_KIND
+                ? "pointer"
+                : "struct";
+
+        LookupElement element_data = { .llvm_type = element_type_info.llvm_type, .type_name = element_type_name, .type_group = element_type_group };
+
+        uint array_length = llvm::get_array_length(element.llvm_type);
+
+        return get_type_size(context, scope, element_data) * (int)array_length;
+    case "string":
+        return 16;
     case "":
-        // hack for now until i figure out how to get the type group from TypeInfo
         TypeInfo* type_info = get_type_info(context, element.type_name);
         NodeList  fields    = get_type_fields(context, type_info, scope);
 

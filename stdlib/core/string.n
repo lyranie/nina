@@ -1,65 +1,30 @@
 mod std.core.string;
 
-type str(char* ptr, int len);
+use std.core.allocator.arena;
 
-str create(char* s) {
-    ret new str(s, len_char(s));
-}
-
-int len(str s) {
-    ret len_char(s.ptr);
-}
-
-int len_char(char* s) {
-    char* t = s;
-    int i = 0;
-
-    while (*t != 0) {
-        t++;
-        i++;
-    }
-
-    ret i;
-}
-
-int index_of(str s, char c) {
-    ret index_of_char(s.ptr, c);
-}
-
-int index_of_char(char* s, char c) {
-    char* t       = s;
-    int   i       = 0;
+int index_of(String s, char c) {
+    char* t = s.ptr;
 
     while (*t != 0) {
         if (*t == c) {
-            ret i;
+            ret (s.ptr - t) as int;
         }
 
         t++;
-        i++;
     }
 
     ret -1;
 }
 
-bool equals(str a, str b) {
-    if (a.len != b.len) {
-        ret false;
+String copy(Arena* alloc, String s) {
+    char* copy = arena.alloc(alloc, char.$size * s.len, char.$size);
+
+    int i = 0;
+    while (i < s.len) {
+        copy[i] = s[i++];
     }
 
-    char* at = a.ptr;
-    char* bt = b.ptr;
-
-    while (*at != 0) {
-        if (*at != *bt) {
-            ret false;
-        }
-
-        at++;
-        bt++;
-    }
-
-    ret true;
+    ret copy[0:i] as String;
 }
 
 /*
@@ -74,6 +39,6 @@ str copy(str s, Allocator alloc) {
 }
 */
 
-long write(File out, str s) {
+long write(File out, String s) {
     ret -1;
 }

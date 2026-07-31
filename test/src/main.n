@@ -1,13 +1,5 @@
 mod test.main;
 
-use std.core.math;
-use std.io;
-
-use libc;
-
-int main(int argc, char** argv) {
-    io.printn(math.PI);
-    libc.printf("%.15f\n", math.PI);
-
+int main() {
     ret 0;
 }

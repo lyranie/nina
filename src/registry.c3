@@ -15,6 +15,7 @@ fn Registry* create(Allocator alloc) {
     registry.functions.init(alloc);
     registry.types.init(alloc);
     registry.type_ids.init(alloc);
+    registry.constants.init(alloc);
 
     return registry;
 }

@@ -357,10 +357,10 @@ struct FunctionSignature {
 }
 
 struct Registry {
-    HashMap{String, FunctionInfo*} functions;
-    HashMap{String, TypeInfo*}     types;
-    HashMap{String, LLVMValueRef}  type_ids;
-    HashMap{String, ConstInfo*}    constants;
+    HashMap{String, FunctionInfo*}                 functions;
+    HashMap{String, TypeInfo*}                     types;
+    HashMap{String, HashMap{String, LLVMValueRef}} type_ids;
+    HashMap{String, ConstInfo*}                    constants;
 }
 
 struct Analyser {

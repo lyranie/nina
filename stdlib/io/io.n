@@ -80,7 +80,7 @@ void printn(any a) {
 long fprint(File out, any x)
 {
 	switch (x.$typeid) {
-	case str.$typeid: ret string.write(out, x.$data);
+	// case str.$typeid: ret string.write(out, x.$data);
 	/*default:
 		$if $defined(String a = x):
 			return out.write((String)x);

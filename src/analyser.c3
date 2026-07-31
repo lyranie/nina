@@ -786,7 +786,7 @@ fn void analyse_index(Analyser* analyser, CompileContext* context, Node* node) {
     LookupElement target = lookup::get(context, node.index_node.target, analyser.scope);
 
     bool is_array = target.type_name.ends_with("]");
-    if (target.type_group != "pointer" && !is_array) {
+    if (target.type_group != "pointer" && target.type_group != "string" && !is_array) {
         highlighter::error(context, context.current_file, node.index_node.target.range.from, node.index_node.target.range.to, "Cannot index type '%s'", target.type_name);
     }
 
@@ -858,6 +858,11 @@ fn void analyse_cast(Analyser* analyser, CompileContext* context, Node* node) {
         valid = true;
     }
 
+    if ((from.type_group == "pointer" && to.type_group == "integer") ||
+        (from.type_group == "integer" && to.type_group == "pointer")) {
+        valid = true;
+    }
+
     if (from.type_name == to.type_name) {
         valid = true;
     }
@@ -874,8 +879,8 @@ fn void analyse_slice(Analyser* analyser, CompileContext* context, Node* node) {
 
     LookupElement target = lookup::get(context, node.slice_node.target, analyser.scope);
 
-    if (target.type_group != "pointer") {
-        highlighter::error(context, context.current_file, node.slice_node.target.range.from, node.slice_node.target.range.to, "Cannot index type '%s'", target.type_name);
+    if (target.type_group != "pointer" && target.type_group != "array") {
+        highlighter::error(context, context.current_file, node.slice_node.target.range.from, node.slice_node.target.range.to, "Cannot slice type '%s'", target.type_name);
     }
 
     LookupElement index = lookup::get(context, node.slice_node.index, analyser.scope);
