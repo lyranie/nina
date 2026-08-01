@@ -67,6 +67,8 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
     case NodeType.CAST:        analyse_cast(analyser, context, node);
     case NodeType.SLICE:       analyse_slice(analyser, context, node);
     case NodeType.CONST:       analyse_const(analyser, context, node);
+    case NodeType.TRY:         analyse_try(analyser, context, node, data);
+    case NodeType.ERR:         analyse_err(analyser, context, node);
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }
@@ -641,6 +643,7 @@ fn void analyse_init(Analyser* analyser, CompileContext* context, Node* node) {
     if (arguments_len > fields_len) {
         Node* argument = node.init_node.arguments[(long)arguments_len - 1];
 
+        highlighter::note(context, type_info.file, type_info.node.range.from, type_info.node.range.to, "Definition was here");
         highlighter::error(context, context.current_file, argument.range.from, argument.range.to, "Expected less arguments");
     }
 
@@ -932,6 +935,77 @@ fn void analyse_const(Analyser* analyser, CompileContext* context, Node* node) {
     }
 }
 
+fn void analyse_try(Analyser* analyser, CompileContext* context, Node* node, void* data) {
+    analyser.scope = scope::create(context.alloc, analyser.scope);
+
+    analyser.try_block = node;
+
+    foreach (Node* statement : node.try_node.try_statements) {
+        analyse_node(analyser, context, statement, data);
+    }
+
+    analyser.try_block = null;
+
+    analyser.scope = analyser.scope.parent;
+    analyser.scope = scope::create(context.alloc, analyser.scope);
+
+    Node* error = node.try_node.error;
+
+    analyse_node(analyser, context, error.parameter_node.type);
+
+    String error_name = error.parameter_node.name.ident_node.name;
+    scope::add_variable(analyser.scope, context.alloc, error_name, error);
+
+    foreach (Node* statement : node.try_node.catch_statements) {
+        analyse_node(analyser, context, statement, data);
+    }
+
+    analyser.scope = analyser.scope.parent;
+}
+
+fn void analyse_err(Analyser* analyser, CompileContext* context, Node* node) {
+    String    name      = node.err_node.name.path_node.path;
+    TypeInfo* type_info = lookup::get_type_info(context, name);
+
+    if (!type_info) {
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Could not find type '%s'", name);
+    }
+
+    NodeList fields = type_info.node.struct_node.fields;
+
+    int arguments_len = (int)node.err_node.arguments.len();
+    int fields_len    = (int)fields.len();
+    
+    if (arguments_len < fields_len) {
+        highlighter::note(context, type_info.file, type_info.node.range.from, type_info.node.range.to, "Definition was here");
+        highlighter::error(context, context.current_file, node.range.from, node.range.to, "Expected more arguments");
+    }
+
+    if (arguments_len > fields_len) {
+        Node* argument = node.err_node.arguments[(long)arguments_len - 1];
+
+        highlighter::note(context, type_info.file, type_info.node.range.from, type_info.node.range.to, "Definition was here");
+        highlighter::error(context, context.current_file, argument.range.from, argument.range.to, "Expected less arguments");
+    }
+
+    foreach (int i, Node* argument : node.err_node.arguments) {
+        if (i >= fields_len) {
+            break;
+        }
+
+        Node* field = fields[i];
+
+        analyse_node(analyser, context, argument);
+
+        if (!lookup::compare_type(context, field, argument, analyser.scope)) {
+            String field_type    = lookup::get(context, field, analyser.scope).type_name;
+            String argument_type = lookup::get(context, argument, analyser.scope).type_name;
+
+            highlighter::error(context, context.current_file, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", field_type, argument_type);
+        }
+    }
+}
+
 fn bool always_returns(Analyser* analyser, CompileContext* context, Node* node) {
     switch (node.type) {
     case NodeType.RET:
@@ -1036,6 +1110,13 @@ fn void handle_call(Analyser* analyser, CompileContext* context, Node* node, Str
             String argument_type  = lookup::get(context, argument, analyser.scope).type_name;
 
             highlighter::error(context, context.current_file, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", parameter_type, argument_type);
+        }
+    }
+
+    if (function_info.node.type == NodeType.FUNCTION && function_info.node.function_node.error) {
+        if (!analyser.try_block) {
+            highlighter::note(context, function_info.file, function_info.node.range.from, function_info.node.range.to, "Definition was here");
+            highlighter::error(context, context.current_file, node.range.from, node.range.to, "'%s' can return an error, surround it with a try-catch", name);
         }
     }
 }

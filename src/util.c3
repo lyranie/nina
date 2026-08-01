@@ -179,6 +179,14 @@ fn LLVMTypeRef slice_type(LLVMTypeRef base) {
     return llvm::struct_type(slice_types, 2, llvm::FALSE);
 }
 
+fn LLVMTypeRef optional_type(LLVMTypeRef base, LLVMTypeRef error) {
+    LLVMTypeRef   base_type      = base;
+    LLVMTypeRef   error_type     = llvm::pointer_type(error, 0);
+    LLVMTypeRef[] optional_types = { base_type, error_type};
+
+    return llvm::struct_type(optional_types, 2, llvm::FALSE);
+}
+
 extern fn void initialize_x86_target_info()  @cname("LLVMInitializeX86TargetInfo");
 extern fn void initialize_x86_target()       @cname("LLVMInitializeX86Target");
 extern fn void initialize_x86_target_mc()    @cname("LLVMInitializeX86TargetMC");

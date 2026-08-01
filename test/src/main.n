@@ -1,5 +1,33 @@
 mod test.main;
 
+use std.io;
+use std.core.string;
+
+type FooErr(String message);
+
 int main() {
+    try {
+        int a = test(0);
+        io.printn(a);
+    } catch (FooErr e) {
+        io.print("Caught error: ");
+        io.printn(e.message);
+    }
+
+    try {
+        char c = string.char_at("Test", 5);
+        io.printn(c);
+    } catch (OutOfBoundsErr e) {
+        io.printn("PENIS");
+    }
+
     ret 0;
+}
+
+int test(int a) : FooErr {
+    if (a == 0) {
+        err FooErr("Some Message");
+    }
+
+    ret 5;
 }

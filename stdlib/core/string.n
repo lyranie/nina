@@ -1,6 +1,9 @@
 mod std.core.string;
 
 use std.core.allocator.arena;
+use std.io;
+
+type OutOfBoundsErr();
 
 int index_of(String s, char c) {
     char* t = s.ptr;
@@ -25,6 +28,14 @@ String copy(Arena* alloc, String s) {
     }
 
     ret copy[0:i] as String;
+}
+
+char char_at(String s, int i) : OutOfBoundsErr {
+    if (i >= s.len) {
+        err OutOfBoundsErr();
+    }
+
+    ret s[i];
 }
 
 /*

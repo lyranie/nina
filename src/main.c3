@@ -11,6 +11,7 @@ import std::collections::list;
 fn void main(String[] argv)
 {
     @todo("mark type narrowing as error without explicit cast");
+    @todo("check function throw type against all throws");
 
     CompileContext* context = core::context_create();
 

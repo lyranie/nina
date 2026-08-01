@@ -84,15 +84,24 @@ fn Node* parse_path(Parser* parser, CompileContext* context, Lexer* lexer) => @p
 fn Node* parse_function(Parser* parser, CompileContext* context, Lexer* lexer) {
     Range start = parser.current.range.start;
 
-    FunctionSignature sig        = parse_function_signature(parser, context, lexer);
-    NodeList          statements = parse_compound(parser, context, lexer);
+    FunctionSignature signature = parse_function_signature(parser, context, lexer);
+
+    Node* error = null;
+    if (parser.current.type == TokenType.COLON) {
+        consume(parser, context, lexer, TokenType.COLON);
+
+        error = parse_path(parser, context, lexer);
+    }
+
+    NodeList statements = parse_compound(parser, context, lexer);
 
     Range end = peek(parser, lexer, -1).range.end;
 
     return @make_node(context, NodeType.FUNCTION, start, end; node) {
-        node.function_node.type       = sig.type;
-        node.function_node.name       = sig.name;
-        node.function_node.parameters = sig.parameters;
+        node.function_node.type       = signature.type;
+        node.function_node.name       = signature.name;
+        node.function_node.parameters = signature.parameters;
+        node.function_node.error      = error;
         node.function_node.statements = statements;
     };
 }
@@ -221,6 +230,8 @@ fn Node* parse_compound_statement(Parser* parser, CompileContext* context, Lexer
         case TokenType.KW_SWITCH: return parse_switch(parser, context, lexer);
         case TokenType.KW_BREAK:  return parse_break(parser, context, lexer);
         case TokenType.KW_TRAP:   return parse_trap(parser, context, lexer);
+        case TokenType.KW_TRY:    return parse_try(parser, context, lexer);
+        case TokenType.KW_ERR:    return parse_err(parser, context, lexer);
         default:
             highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
         }
@@ -1010,6 +1021,49 @@ fn Node* parse_const(Parser* parser, CompileContext* context, Lexer* lexer) {
         node.const_node.type  = type;
         node.const_node.name  = name;
         node.const_node.value = value;
+    };
+}
+
+fn Node* parse_try(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.KW_TRY);
+
+    NodeList try_statements = parse_compound(parser, context, lexer);
+
+    consume(parser, context, lexer, TokenType.KW_CATCH);
+    consume(parser, context, lexer, TokenType.LPAREN);
+
+    Node* error = parse_parameter(parser, context, lexer);
+
+    consume(parser, context, lexer, TokenType.RPAREN);
+
+    NodeList catch_statements = parse_compound(parser, context, lexer);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.TRY, start, end; node) {
+        node.try_node.try_statements   = try_statements;
+        node.try_node.error            = error;
+        node.try_node.catch_statements = catch_statements;
+    };
+}
+
+fn Node* parse_err(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.KW_ERR);
+
+    Node*    name      = parse_path(parser, context, lexer);
+    NodeList arguments = parse_arguments(parser, context, lexer);
+
+    consume(parser, context, lexer, TokenType.SEMI);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.ERR, start, end; node) {
+        node.err_node.name      = name;
+        node.err_node.arguments = arguments;
     };
 }
 

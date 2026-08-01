@@ -1,2 +1,21 @@
 mod stc.encoding.json;
 
+const int TYPE_KIND_NULL   = 0;
+const int TYPE_KIND_BOOL   = 1;
+const int TYPE_KIND_NUMBER = 2;
+const int TYPE_KIND_STRING = 3;
+const int TYPE_KIND_ARRAY  = 4;
+const int TYPE_KIND_OBJECT = 5;
+
+type JsonValue(
+    int         kind,
+    bool        as_bool,
+    real        as_real,
+    String      as_string,
+    JsonValue[] as_array,
+    JsonEntry[] as_object
+);
+
+type JsonEntry(String key, JsonValue value);
+
+// W.I.P

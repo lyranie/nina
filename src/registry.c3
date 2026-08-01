@@ -97,12 +97,26 @@ fn void register_functions(CompileContext* context, Node* node) {
         String fn_name  = node.function_node.name.ident_node.name;
         String name     = string::format(context.alloc, "%s.%s", mod_name, fn_name);
 
-        TypeInfo* type_info = lookup::get_type_info(context, node.function_node.type.type_node.name.path_node.path);
-        if (!type_info) {
+        TypeInfo* value_type_info = lookup::get_type_info(context, node.function_node.type.type_node.name.path_node.path);
+        if (!value_type_info) {
             highlighter::error(context, context.current_file, node.function_node.type.range.from, node.function_node.type.range.to, "Could not find type '%s'", node.function_node.type.type_node.name.path_node.path);
         }
 
-        LLVMTypeRef return_type = lookup::get(context, node.function_node.type, null).llvm_type;
+        LLVMTypeRef return_type;
+
+        if (node.function_node.error) {
+            TypeInfo* error_type_info = lookup::get_type_info(context, node.function_node.error.path_node.path);
+            if (!error_type_info) {
+                highlighter::error(context, context.current_file, node.function_node.error.range.from, node.function_node.error.range.to, "Could not find type '%s'", node.function_node.error.path_node.path);
+            }
+
+            LLVMTypeRef value_llvm_type = value_type_info.llvm_type;
+            LLVMTypeRef error_llvm_type = error_type_info.llvm_type;
+
+            return_type = llvm::optional_type(value_llvm_type, error_llvm_type);
+        } else {
+            return_type = lookup::get(context, node.function_node.type, null).llvm_type;
+        }
     
         List{LLVMTypeRef} parameters;
         parameters.tinit();

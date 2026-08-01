@@ -47,6 +47,9 @@ struct CompileContext {
     HashMap{String, Node*}         trees;
     HashMap{String, LLVMModuleRef} modules;
     LLVMContextRef                 llvm_context;
+    LLVMBasicBlockRef              catch_block;
+    LLVMValueRef                   catch_error;
+    Node*                          current_function;
 }
 
 struct Range {
@@ -106,6 +109,9 @@ enum TokenType {
     KW_BREAK,
     KW_TRAP,
     KW_CONST,
+    KW_TRY,
+    KW_CATCH,
+    KW_ERR,
 
     SEMI,
     LPAREN,
@@ -188,6 +194,7 @@ struct Node {
         struct function_node {
             Node*    type;
             Node*    name;
+            Node*    error;
             NodeList parameters;
             NodeList statements;
         }
@@ -305,6 +312,15 @@ struct Node {
             Node* name;
             Node* value;
         }
+        struct try_node {
+            NodeList try_statements;
+            Node*    error;
+            NodeList catch_statements;
+        }
+        struct err_node {
+            Node*    name;
+            NodeList arguments;
+        }
     }
 }
 
@@ -348,6 +364,8 @@ enum NodeType {
     TRAP,
     SLICE,
     CONST,
+    TRY,
+    ERR,
 }
 
 struct FunctionSignature {
@@ -367,6 +385,7 @@ struct Analyser {
     Scope*     scope;
     String     module_name;
     StringList imports;
+    Node*      try_block;
 }
 
 struct Scope {
