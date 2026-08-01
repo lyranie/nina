@@ -1069,7 +1069,19 @@ fn Node* parse_err(Parser* parser, CompileContext* context, Lexer* lexer) {
 
 fn void consume(Parser* parser, CompileContext* context, Lexer* lexer, TokenType type) {
     if (parser.current.type != type) {
-        highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Expected type '%s', got '%s'", type, parser.current.type);
+        Token last = peek(parser, lexer, -1);
+
+        switch (type) {
+        case TokenType.SEMI:
+            Range start = { last.range.start.line, last.range.start.column + 1 };
+            Range end   = { last.range.end.line, last.range.end.column + 1 };
+
+            highlighter::error(context, context.current_file, start, end, "Expected semicolon after statement");
+        case TokenType.IDENT:
+            highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Identifier expected, got '%s'", parser.current.value);
+        default:
+            highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Expected '%s', got '%s'", util::get_token_value(type), parser.current.value);
+        }
     }
 
     if ((long)parser.cursor + 1 < lexer.context.tokens.len()) {

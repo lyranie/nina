@@ -38,3 +38,6 @@ test-stdlib: all
 
 clean:
 	rm -rf build
+
+test: all
+	./build/nina compile test/src/main.n --ir

@@ -1026,6 +1026,25 @@ fn void analyse_err(Analyser* analyser, CompileContext* context, Node* node) {
             highlighter::error(context, context.current_file, argument.range.from, argument.range.to, "Expected type '%s', got '%s'", field_type, argument_type);
         }
     }
+
+    if (!analyser.try_block) {
+        if (!analyser.function.function_node.error) {
+            highlighter::error(context, context.current_file, analyser.function.range.from, analyser.function.range.to, "This function needs to throw '%s'", name);
+        }
+
+        String actual_name = analyser.function.function_node.error.path_node.path;
+
+        if (name != actual_name) {
+            highlighter::error(context, context.current_file, analyser.function.function_node.error.range.from, analyser.function.function_node.error.range.to, "Expected error type '%s', got '%s'", name, actual_name);
+        }
+    } else {
+        Node*  catch_err   = analyser.try_block.try_node.error;
+        String actual_name = catch_err.parameter_node.type.type_node.name.path_node.path;
+        
+        if (name != actual_name) {
+            highlighter::error(context, context.current_file, catch_err.range.from, catch_err.range.to, "Expected error type '%s', got '%s'", name, actual_name);
+        }
+    }
 }
 
 fn bool always_returns(Analyser* analyser, CompileContext* context, Node* node) {

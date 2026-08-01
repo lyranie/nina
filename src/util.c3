@@ -27,6 +27,7 @@ $endif
 module nina::util;
 
 import nina::types;
+import nina::highlighter;
 
 import libc;
 
@@ -167,6 +168,74 @@ fn bool is_type_typeid_access(Node* node, String* out_type) {
 
     *out_type = node.access_node.name.ident_node.name;
     return true;
+}
+
+fn String get_token_value(TokenType type) {
+    switch (type) {
+    case TokenType.EOF:        return "<eof>";
+    case TokenType.INT:        return "integer";
+    case TokenType.REAL:       return "real";
+    case TokenType.STRING:     return "string";
+    case TokenType.TRUE:       return "true";
+    case TokenType.FALSE:      return "false";
+    case TokenType.NULL:       return "null";
+    case TokenType.CHAR:       return "character";
+
+    case TokenType.KW_MOD:     return "\"mod\"";
+    case TokenType.KW_RET:     return "\"ret\"";
+    case TokenType.KW_EXT:     return "\"ext\"";
+    case TokenType.KW_USE:     return "\"use\"";
+    case TokenType.KW_IF:      return "\"if\"";
+    case TokenType.KW_ELSE:    return "\"else\"";
+    case TokenType.KW_TYPE:    return "\"type\"";
+    case TokenType.KW_NEW:     return "\"new\"";
+    case TokenType.KW_WHILE:   return "\"while\"";
+    case TokenType.KW_BASE:    return "\"base\"";
+    case TokenType.KW_AS:      return "\"as\"";
+    case TokenType.KW_SWITCH:  return "\"switch\"";
+    case TokenType.KW_CASE:    return "\"case\"";
+    case TokenType.KW_DEFAULT: return "\"default\"";
+    case TokenType.KW_BREAK:   return "\"break\"";
+    case TokenType.KW_TRAP:    return "\"trap\"";
+    case TokenType.KW_CONST:   return "\"const\"";
+    case TokenType.KW_TRY:     return "\"try\"";
+    case TokenType.KW_CATCH:   return "\"catch\"";
+    case TokenType.KW_ERR:     return "\"err\"";
+
+    case TokenType.SEMI:       return ";";
+    case TokenType.LPAREN:     return "(";
+    case TokenType.RPAREN:     return ")";
+    case TokenType.LBRACE:     return "{";
+    case TokenType.RBRACE:     return "}";
+    case TokenType.LBRACKET:   return "[";
+    case TokenType.RBRACKET:   return "]";
+    case TokenType.ASTERISK:   return "*";
+    case TokenType.EQUALS:     return "=";
+    case TokenType.PERIOD:     return ".";
+    case TokenType.COMMA:      return ",";
+    case TokenType.PLUS:       return "+";
+    case TokenType.MINUS:      return "-";
+    case TokenType.SLASH:      return "/";
+    case TokenType.AMP:        return "&";
+    case TokenType.ELLIPSE:    return "...";
+    case TokenType.AND:        return "&&";
+    case TokenType.OR:         return "||";
+    case TokenType.IS_EQUAL:   return "==";
+    case TokenType.NOT_EQUAL:  return "!=";
+    case TokenType.GTE:        return ">=";
+    case TokenType.LTE:        return "<=";
+    case TokenType.LANGLE:     return "<";
+    case TokenType.RANGLE:     return ">";
+    case TokenType.BANG:       return "!";
+    case TokenType.COLON:      return ":";
+    case TokenType.PIPE:       return "|";
+    case TokenType.CARET:      return "^";
+    case TokenType.TILDA:      return "~";
+    case TokenType.SHL:        return "<<";
+    case TokenType.SHR:        return ">>";
+
+    default: highlighter::panic("missing get_token_value case for type '%s'", type);
+    }
 }
 
 module llvm;
