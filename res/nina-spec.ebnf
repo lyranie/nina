@@ -1,9 +1,9 @@
-IDENT       ::= [a-zA-Z_$][a-zA-Z0-9_$]*
-INT         ::= 0x[0-9a-fA-F][0-9a-fA-F_]* | [0-9][0-9_]*
-REAL        ::= [0-9][0-9_]*\.[0-9][0-9_]*
-STRING      ::= "([^"\\]|\\.)*"
-CHAR        ::= '([^'\\]|\\.)'
-LINE_COMMENT ::= //[^\n]*\n
+IDENT         ::= [a-zA-Z_$][a-zA-Z0-9_$]*
+INT           ::= 0x[0-9a-fA-F][0-9a-fA-F_]* | [0-9][0-9_]*
+REAL          ::= [0-9][0-9_]*\.[0-9][0-9_]*
+STRING        ::= "([^"\\]|\\.)*"
+CHAR          ::= '([^'\\]|\\.)'
+LINE_COMMENT  ::= //[^\n]*\n
 BLOCK_COMMENT ::= /\*.*?\*/
 
 KW_MOD      ::= mod
@@ -22,6 +22,10 @@ KW_CASE     ::= case
 KW_DEFAULT  ::= default
 KW_BREAK    ::= break
 KW_TRAP     ::= trap
+KW_CONST    ::= conts
+KW_TRY      ::= try
+KW_CATCH    ::= catch
+KW_ERR      ::= err
 TRUE        ::= true
 FALSE       ::= false
 NULL        ::= null
@@ -58,123 +62,202 @@ LTE         ::= <=
 SHL         ::= <<
 SHR         ::= >>
 
-module ::= KW_MOD path SEMI top_level_statement*
+module
+    ::= KW_MOD path SEMI top_level_statement*
 
-top_level_statement ::= function | ext_decl | use_decl | struct_decl | base_decl
+top_level_statement
+    ::= function
+	|   ext_decl
+	|   use_decl
+	|   struct_decl
+	|   base_decl
 
-path ::= IDENT (PERIOD IDENT)*
+path
+    ::= IDENT (PERIOD IDENT)*
 
-function ::= function_signature compound
+function
+    ::= function_signature compound
 
-function_signature ::= type IDENT parameters
+function_signature
+    ::= type IDENT parameters
 
-parameters ::= LPAREN (parameter (COMMA parameter)*)? RPAREN
+parameters
+    ::= LPAREN (parameter (COMMA parameter)*)? RPAREN
 
-parameter ::= type? IDENT ELLIPSE?
+parameter
+    ::= type? IDENT ELLIPSE?
 
-ext_decl ::= KW_EXT function_signature SEMI
+ext_decl
+    ::= KW_EXT function_signature SEMI
 
-base_decl ::= KW_BASE IDENT LBRACE base_function* RBRACE
+base_decl
+    ::= KW_BASE IDENT LBRACE base_function* RBRACE
 
-base_function ::= function_signature SEMI
+base_function
+    ::= function_signature SEMI
 
-type ::= path (ASTERISK | LBRACKET expr? RBRACKET)*
+type
+    ::= path (ASTERISK | LBRACKET expr? RBRACKET)*
 
-struct_decl ::= KW_TYPE IDENT fields (COLON path)? SEMI
+struct_decl
+    ::= KW_TYPE IDENT fields (COLON path)? SEMI
 
-fields ::= LPAREN (field (COMMA field)*)? RPAREN
+fields
+    ::= LPAREN (field (COMMA field)*)? RPAREN
 
-field ::= type IDENT
+field
+    ::= type IDENT
 
-use_decl ::= KW_USE path SEMI
+use_decl
+    ::= KW_USE path SEMI
 
-compound ::= LBRACE compound_statement* RBRACE
+compound
+    ::= LBRACE compound_statement* RBRACE
 
-compound_statement ::= ret_stmt
-                     | identifier_statement
-                     | if_stmt
-                     | assign_or_expr_statement
-                     | while_stmt
-                     | switch_stmt
-                     | break_stmt
-                     | trap_stmt
+compound_statement
+    ::= ret_stmt
+    |   identifier_statement
+	|   if_stmt
+	|   assign_or_expr_statement
+    |   while_stmt
+    |   switch_stmt
+    |   break_stmt
+    |   trap_stmt
+    |   try_stmt
+    |   err_stmt
 
-ret_stmt ::= KW_RET expr? SEMI
+ret_stmt
+    ::= KW_RET expr? SEMI
 
-break_stmt ::= KW_BREAK SEMI
+break_stmt
+    ::= KW_BREAK SEMI
 
-trap_stmt ::= KW_TRAP SEMI
+trap_stmt
+    ::= KW_TRAP SEMI
 
-identifier_statement ::= call_statement | variable | assign_or_expr_statement
+identifier_statement
+    ::= call_statement
+	|   variable
+	|   assign_or_expr_statement
 
-call_statement ::= call SEMI
+call_statement
+    ::= call SEMI
 
-variable ::= type IDENT (EQUALS expr)? SEMI
+variable
+    ::= type IDENT (EQUALS expr)? SEMI
 
-assign_or_expr_statement ::= expr (EQUALS expr)? SEMI
+assign_or_expr_statement
+    ::= expr (EQUALS expr)? SEMI
 
-if_stmt ::= KW_IF LPAREN expr RPAREN compound (KW_ELSE (if_stmt | compound))?
+if_stmt
+    ::= KW_IF LPAREN expr RPAREN compound (KW_ELSE (if_stmt | compound))?
 
-while_stmt ::= KW_WHILE LPAREN expr RPAREN compound
+while_stmt
+    ::= KW_WHILE LPAREN expr RPAREN compound
 
-switch_stmt ::= KW_SWITCH LPAREN expr RPAREN LBRACE switch_case* RBRACE
+switch_stmt
+    ::= KW_SWITCH LPAREN expr RPAREN LBRACE switch_case* RBRACE
 
-switch_case ::= case_clause | default_clause
+switch_case
+    ::= case_clause
+	|   default_clause
 
-case_clause ::= KW_CASE expr COLON compound_statement*
+case_clause
+    ::= KW_CASE expr COLON compound_statement*
 
-default_clause ::= KW_DEFAULT COLON compound_statement*
+default_clause
+    ::= KW_DEFAULT COLON compound_statement*
 
-expr ::= binary_expr
+expr
+    ::= binary_expr
 
-binary_expr ::= factor (binary_operator factor)*
+binary_expr
+    ::= factor (binary_operator factor)*
 
-binary_operator ::= OR | AND | IS_EQUAL | NOT_EQUAL | GTE | LTE | SHL | SHR
-                   | LANGLE | RANGLE | PLUS | MINUS | ASTERISK | SLASH
-                   | AMP | PIPE | CARET
+binary_operator
+    ::= OR
+	|   AND
+	|   IS_EQUAL
+	|   NOT_EQUAL
+	|   GTE
+	|   LTE
+	|   SHL
+	|   SHR
+    |   LANGLE
+	|   RANGLE
+	|   PLUS
+	|   MINUS
+	|   ASTERISK
+	|   SLASH
+	|   AMP
+	|   PIPE
+	|   CARET
 
-factor ::= primary suffix_op? cast_op*
+factor
+    ::= primary suffix_op? cast_op*
 
-primary ::= INT
-          | bool_literal
-          | STRING
-          | identifier_expr
-          | LPAREN expr RPAREN
-          | unary_expr
-          | init_expr
-          | null_expr
-          | reference_expr
-          | dereference_expr
-          | REAL
-          | CHAR
-          | array_expr
+primary
+    ::= INT
+    |   bool_literal
+    |   STRING
+    |   identifier_expr
+    |   LPAREN expr RPAREN
+    |   unary_expr
+    |   init_expr
+    |   null_expr
+    |   reference_expr
+    |   dereference_expr
+    |   REAL
+    |   CHAR
+    |   array_expr
 
-bool_literal ::= TRUE | FALSE
+bool_literal
+    ::= TRUE | FALSE
 
-identifier_expr ::= call | access | IDENT
+identifier_expr
+    ::= call | access | IDENT
 
-call ::= path arguments
+call
+    ::= path arguments
 
-arguments ::= LPAREN (expr (COMMA expr)*)? RPAREN
+arguments
+    ::= LPAREN (expr (COMMA expr)*)? RPAREN
 
-access ::= IDENT PERIOD identifier_expr
+access
+    ::= IDENT PERIOD identifier_expr
 
-unary_expr ::= (TILDA | BANG | PLUS | MINUS) expr
+unary_expr
+    ::= (TILDA | BANG | PLUS | MINUS) expr
 
-init_expr ::= KW_NEW path arguments
+init_expr
+    ::= KW_NEW path arguments
 
-null_expr ::= NULL
+null_expr
+    ::= NULL
 
-reference_expr ::= AMP expr
+reference_expr
+    ::= AMP expr
 
-dereference_expr ::= ASTERISK factor
+dereference_expr
+    ::= ASTERISK factor
 
-array_expr ::= LBRACKET (expr (COMMA expr)*)? RBRACKET
+array_expr
+    ::= LBRACKET (expr (COMMA expr)*)? RBRACKET
 
-suffix_op ::= index_or_slice* repeated_op?
+suffix_op
+    ::= index_or_slice* repeated_op?
 
-index_or_slice ::= LBRACKET expr (COLON expr)? RBRACKET
+index_or_slice
+    ::= LBRACKET expr (COLON expr)? RBRACKET
 
-repeated_op ::= (PLUS PLUS) | (MINUS MINUS) | (BANG BANG)
+repeated_op
+    ::= (PLUS PLUS) | (MINUS MINUS) | (BANG BANG)
 
-cast_op ::= KW_AS type
+cast_op
+    ::= KW_AS type
+
+try_stmt
+    ::= KW_TRY compound KW_CATCH LPAREN parameter RPAREN compound
+
+err_stmt
+    ::= KW_ERR path arguments SEMI
