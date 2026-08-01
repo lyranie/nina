@@ -6,6 +6,8 @@ import std::io;
 import std::os;
 import std::time;
 import std::thread;
+import std::collections::map;
+import std::collections::set;
 import std::collections::list;
 
 fn void main(String[] argv)
@@ -36,7 +38,7 @@ fn void main(String[] argv)
     core::context_free(context);
 }
 
-fn void compile(CompileContext* context) {
+fn void compile(CompileContext* context) => @pool() {
     add_stdlib(context);
 
     foreach (String file : context.args.files) {
@@ -56,6 +58,8 @@ fn void compile(CompileContext* context) {
 
         lexer::free(lexer, context.alloc);
     }
+
+    remove_unused(context);
 
     foreach (String file : context.args.files) {
         String path = file.to_tpath().absolute(context.alloc).copy(context.alloc)!!;
@@ -144,4 +148,93 @@ fn void add_stdlib(CompileContext* context) {
 
         return false;
     }, context)!!;
+}
+
+fn void remove_unused(CompileContext* context) => @pool() {
+    HashMap{String, String} module_to_path;
+    module_to_path.tinit();
+
+    context.trees.@each(; name, ast) {
+        module_to_path.set(ast.mod_node.path.path_node.path, name);
+    };
+
+    HashSet{String} used_modules;
+    used_modules.tinit();
+
+    StringList worklist;
+    worklist.tinit();
+
+    context.trees.@each(; name, ast) {
+        if (!name.contains("/stdlib/")) {
+            used_modules.add(ast.mod_node.path.path_node.path);
+
+            foreach (String imp : get_imports(context, ast)) {
+                worklist.push(imp);
+            }
+        }
+    };
+
+    while (worklist.len() > 0) {
+        String? mod_name_result = worklist.pop_first();
+        if (catch mod_name_result) {
+            continue;
+        }
+
+        String mod_name = mod_name_result;
+
+        if (used_modules.contains(mod_name)) {
+            continue;
+        }
+
+        used_modules.add(mod_name);
+
+        String? path = module_to_path.get(mod_name);
+        if (catch err = path) {
+            highlighter::panic();
+        }
+
+        Node* imported_ast = context.trees.get(path)!!;
+        foreach (String imp : get_imports(context, imported_ast)) {
+            if (!used_modules.contains(imp)) {
+                worklist.push(imp);
+            }
+        }
+    }
+
+    String[] all_names = context.trees.keys(context.alloc);
+    foreach (String name : all_names) {
+        Node* ast = context.trees.get(name)!!;
+        String mod_name = ast.mod_node.path.path_node.path;
+
+        if (!used_modules.contains(mod_name)) {
+            context.trees.remove(name);
+        }
+    }
+
+    StringList kept_files;
+    kept_files.tinit();
+    foreach (String file : context.args.files) {
+        String path = file.to_tpath().absolute(context.alloc).copy(context.alloc)!!;
+
+        if (context.trees.has_key(path)) {
+            kept_files.push(file);
+        }
+    }
+
+    context.args.files = kept_files;
+}
+
+fn StringList get_imports(CompileContext* context, Node* ast) {
+    StringList imports;
+    imports.init(context.alloc);
+
+    foreach (Node* statement : ast.mod_node.statements) {
+        if (statement.type != NodeType.USE) {
+            continue;
+        }
+
+        imports.push(statement.use_node.path.path_node.path);
+    }
+
+    return imports;
 }

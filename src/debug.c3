@@ -8,7 +8,7 @@ import nina::lookup;
 import std::collections::list;
 import std::io;
 
-fn void add_function(Generator* generator, CompileContext* context, Node* node, LLVMValueRef llvm_function_value, bool is_definition = true) {
+fn void add_function(Generator* generator, CompileContext* context, Node* node, LLVMValueRef llvm_function_value, bool is_definition = true) => @pool() {
     if (context.args.no_debug) {
         return;
     }
