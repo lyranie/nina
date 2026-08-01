@@ -165,7 +165,7 @@ fn void remove_unused(CompileContext* context) => @pool() {
     worklist.tinit();
 
     context.trees.@each(; name, ast) {
-        if (!name.contains("/stdlib/")) {
+        if (!name.contains("/stdlib/") || name.contains("/stdlib/core/builtin.n")) {
             used_modules.add(ast.mod_node.path.path_node.path);
 
             foreach (String imp : get_imports(context, ast)) {
@@ -212,7 +212,7 @@ fn void remove_unused(CompileContext* context) => @pool() {
     }
 
     StringList kept_files;
-    kept_files.tinit();
+    kept_files.init(context.alloc);
     foreach (String file : context.args.files) {
         String path = file.to_tpath().absolute(context.alloc).copy(context.alloc)!!;
 

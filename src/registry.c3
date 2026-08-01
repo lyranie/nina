@@ -105,15 +105,23 @@ fn void register_functions(CompileContext* context, Node* node) {
         LLVMTypeRef return_type;
 
         if (node.function_node.error) {
-            TypeInfo* error_type_info = lookup::get_type_info(context, node.function_node.error.path_node.path);
-            if (!error_type_info) {
-                highlighter::error(context, context.current_file, node.function_node.error.range.from, node.function_node.error.range.to, "Could not find type '%s'", node.function_node.error.path_node.path);
+            if (fn_name == "main") {
+                return_type = lookup::get(context, node.function_node.type, null).llvm_type;
+            } else {
+                TypeInfo* error_type_info = lookup::get_type_info(context, node.function_node.error.path_node.path);
+                if (!error_type_info) {
+                    highlighter::error(context, context.current_file, node.function_node.error.range.from, node.function_node.error.range.to, "Could not find type '%s'", node.function_node.error.path_node.path);
+                }
+
+                LLVMTypeRef value_llvm_type = value_type_info.llvm_type;
+                LLVMTypeRef error_llvm_type = error_type_info.llvm_type;
+
+                if (llvm::get_type_kind(value_llvm_type) == LLVMTypeKind.VOID_TYPE_KIND) {
+                    value_llvm_type = llvm::struct_type(null, 0, llvm::FALSE);
+                }
+
+                return_type = llvm::optional_type(value_llvm_type, error_llvm_type);
             }
-
-            LLVMTypeRef value_llvm_type = value_type_info.llvm_type;
-            LLVMTypeRef error_llvm_type = error_type_info.llvm_type;
-
-            return_type = llvm::optional_type(value_llvm_type, error_llvm_type);
         } else {
             return_type = lookup::get(context, node.function_node.type, null).llvm_type;
         }

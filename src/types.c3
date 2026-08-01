@@ -386,6 +386,7 @@ struct Analyser {
     String     module_name;
     StringList imports;
     Node*      try_block;
+    Node*      function;
 }
 
 struct Scope {
@@ -463,6 +464,8 @@ struct Generator {
     LLVMDIBuilderRef        llvm_debug_builder;
     LLVMMetadataRef         llvm_debug_file;
     List{LLVMBasicBlockRef} break_targets;
+    Node*                   try_block;
+    Node*                   function;
 }
 
 struct Linker {

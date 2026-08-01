@@ -108,6 +108,20 @@ fn TypeInfo* get_type_info(CompileContext* context, String name, Node* node = nu
         return type_info;
     }
 
+    if (name.ends_with("[N]")) {
+        TypeInfo* base_info = get_type_info(context, name[:name.len - 3]);
+        if (!base_info) {
+            return null;
+        }
+
+        TypeInfo* type_info = alloc::new(context.alloc, TypeInfo);
+        type_info.name      = name;
+        type_info.node      = base_info.node;
+        type_info.llvm_type = base_info.llvm_type;
+
+        return type_info;
+    }
+
     TypeInfo* type_info;
 
     if (context.lookup.has_key(name)) {

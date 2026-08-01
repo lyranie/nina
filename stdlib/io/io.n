@@ -1,6 +1,5 @@
 mod std.io;
 
-use std.core.string;
 use std.io.file;
 use libc;
 

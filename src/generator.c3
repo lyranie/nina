@@ -142,7 +142,7 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
     case NodeType.SLICE:       return generate_slice(generator, context, node);
     case NodeType.CONST:       break;
     case NodeType.TRY:                generate_try(generator, context, node, data);
-    case NodeType.ERR:         return generate_err(generator, context, node, data);
+    case NodeType.ERR:                generate_err(generator, context, node, data);
     default:
         highlighter::panic("Missing generator function for type '%s'", node.type);
     }
@@ -177,6 +177,8 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
         llvm_function_value
     );
 
+    generator.function = node;
+
     debug::add_function(generator, context, node, llvm_function_value);
 
     generator.scope = scope::create(context.alloc, generator.scope);
@@ -204,12 +206,20 @@ fn void generate_function(Generator* generator, CompileContext* context, Node* n
 
     if (!returned && lookup::get(context, node, generator.scope, generator).type_name == "void")
     {
-        llvm::build_ret_void(generator.llvm_builder);
+        if (generator.function.function_node.error) {
+            LLVMValueRef llvm_value = make_optional(generator, context, null, null);
+
+            llvm::build_ret(generator.llvm_builder, llvm_value);
+        } else {
+            llvm::build_ret_void(generator.llvm_builder);
+        }
     }
 
     if (!llvm::get_basic_block_terminator(llvm::get_insert_block(generator.llvm_builder))) {
         llvm::build_unreachable(generator.llvm_builder);
     }
+
+    generator.function = null;
 }
 
 fn void generate_ret(Generator* generator, CompileContext* context, Node* node, void* data) {
@@ -220,13 +230,19 @@ fn void generate_ret(Generator* generator, CompileContext* context, Node* node, 
     if (value) {
         LLVMValueRef llvm_value = generate_node(generator, context, value, data);
 
-        if (context.current_function.function_node.error) {
+        if (context.current_function.function_node.error && generator.function.function_node.name.ident_node.name != "main") {
             llvm_value = make_optional(generator, context, llvm_value, null);
         }
 
         llvm::build_ret(generator.llvm_builder, llvm_value);
     } else {
-        llvm::build_ret_void(generator.llvm_builder);
+        if (generator.function.function_node.error) {
+            LLVMValueRef llvm_value = make_optional(generator, context, null, null);
+
+            llvm::build_ret(generator.llvm_builder, llvm_value);
+        } else {
+            llvm::build_ret_void(generator.llvm_builder);
+        }
     }
 }
 
@@ -331,6 +347,11 @@ fn LLVMValueRef generate_call(Generator* generator, CompileContext* context, Nod
     LLVMValueRef call = llvm::build_call_2(generator.llvm_builder, function_info.llvm_type, function_info.llvm_value, arguments.to_array(context.alloc), (CUInt)arguments.len(), "");
 
     if (function_info.node.type == NodeType.FUNCTION && function_info.node.function_node.error) {
+        if (generator.function.function_node.error) {
+            @todo("call builtin panic");
+            return call;
+        }
+
         LLVMValueRef error_val = llvm::build_extract_value(generator.llvm_builder, call, 1, "");
         LLVMValueRef null_ptr  = llvm::const_null(llvm::type_of(error_val));
         LLVMValueRef is_null   = llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_EQ, error_val, null_ptr, "");
@@ -601,7 +622,7 @@ fn bool generate_compound(Generator* generator, CompileContext* context, NodeLis
             continue;
         }
 
-        if (statement.type == NodeType.RET && index != statements.len() - 1) {
+        if ((statement.type == NodeType.RET || statement.type == NodeType.ERR)) {
             returned = true;
         }
 
@@ -726,6 +747,11 @@ fn LLVMValueRef generate_access(Generator* generator, CompileContext* context, N
             LLVMValueRef call = llvm::build_call_2(generator.llvm_builder, function_info.llvm_type, callee, arguments.to_array(context.alloc), (CUInt)arguments.len(), "");
 
             if (function_info.node.type == NodeType.FUNCTION && function_info.node.function_node.error) {
+                if (generator.function.function_node.error) {
+                    @todo("call builtin panic");
+                    return call;
+                }
+
                 LLVMValueRef error_val = llvm::build_extract_value(generator.llvm_builder, call, 1, "");
                 LLVMValueRef null_ptr  = llvm::const_null(llvm::type_of(error_val));
                 LLVMValueRef is_null   = llvm::build_i_cmp(generator.llvm_builder, LLVMIntPredicate.INT_EQ, error_val, null_ptr, "");
@@ -1972,6 +1998,8 @@ fn void generate_try(Generator* generator, CompileContext* context, Node* node, 
 
     Node* error = node.try_node.error;
 
+    generator.try_block = node;
+
     String       error_name       = error.parameter_node.name.ident_node.name;
     LLVMTypeRef  llvm_error_type  = lookup::get(context, error, generator.scope, generator).llvm_type;
     // LLVMValueRef llvm_error_value = llvm::get_param(function_info.llvm_value, index);
@@ -2001,6 +2029,7 @@ fn void generate_try(Generator* generator, CompileContext* context, Node* node, 
     }
 
     generator.scope = generator.scope.parent;
+    generator.try_block = null;
 
     // -- CATCH --
     generator.scope = scope::create(context.alloc, generator.scope);
@@ -2031,7 +2060,7 @@ fn void generate_try(Generator* generator, CompileContext* context, Node* node, 
     llvm::position_builder_at_end(generator.llvm_builder, then_block);
 }
 
-fn LLVMValueRef generate_err(Generator* generator, CompileContext* context, Node* node, void* data) {
+fn void generate_err(Generator* generator, CompileContext* context, Node* node, void* data) {
     String name      = node.init_node.name.path_node.path;
     String full_name = string::tformat("%s.%s", generator.module_name, name);
 
@@ -2067,7 +2096,7 @@ fn LLVMValueRef generate_err(Generator* generator, CompileContext* context, Node
     }
 
     LLVMValueRef optional_val = make_optional(generator, context, null, instance);
-    return llvm::build_ret(generator.llvm_builder, optional_val);
+    llvm::build_ret(generator.llvm_builder, optional_val);
 }
 
 fn LLVMValueRef get_or_declare_function(Generator* generator, CompileContext* context, FunctionInfo* function_info) {

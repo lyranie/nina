@@ -1,5 +1,6 @@
 mod std.io.file;
 
+use std.core.allocator.arena;
 use std.core.string;
 use libc;
 
@@ -17,6 +18,8 @@ const int SEEK_CUR = 1;
 const int SEEK_END = 2;
 
 const int DEFAULT_MODE = 420;
+
+type FileReadErr(String filename, String message);
 
 int errno() {
     ret *libc.__errno_location();
@@ -83,37 +86,39 @@ int size(File file) {
     ret end;
 }
 
-String read_text(String path) {
+// pass aloocator for char* alloc
+String read_text(Arena* alloc, String path) : FileReadErr {
     File file = open(path, "rb");
     if (file.fd == -1) {
-        ret "";
+        err FileReadErr(path, "File not found");
     }
 
     int total = size(file);
     if (total == -1) {
         close(file);
-        ret "";
+        err FileReadErr(path, "File is corrupted");
     }
 
-    char* buffer = libc.malloc(total + 1);
+    char* buffer = arena.alloc(alloc, total + 1, 8);
     if (!buffer) {
         close(file);
-        ret "";
+        err FileReadErr(path, "Failed to allocate");
     }
 
     int received = 0;
     while (received < total) {
         int n = read(file, buffer + received, total - received);
         if (n <= 0) {
-            libc.free(buffer);
+            // fix; add free_ptr function
+            // arena.free(alloc, buffer);
             close(file);
-            ret "";
+            err FileReadErr(path, "Failed to read");
         }
 
         received = received + n;
     }
 
-    libc.memset(buffer + total, 0, 1);
+    buffer[total] = 0;
     close(file);
 
     ret buffer[0:total] as String;

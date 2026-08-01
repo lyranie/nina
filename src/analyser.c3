@@ -105,6 +105,8 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
         highlighter::error(context, context.current_file, node.range.from, node.range.to, "Function '%s' already defined", name);
     }
 
+    analyser.function = node;
+
     scope::add_function(analyser.scope, context.alloc, name, analyser.module_name, context.current_file, node);
 
     LookupElement lookup_data = lookup::get(context, node, analyser.scope);
@@ -141,6 +143,8 @@ fn void analyse_function(Analyser* analyser, CompileContext* context, Node* node
     analyser.scope = analyser.scope.parent;
 
     parameters.free();
+
+    analyser.function = null;
 }
 
 fn void analyse_type(Analyser* analyser, CompileContext* context, Node* node) => @pool() {
@@ -951,6 +955,22 @@ fn void analyse_try(Analyser* analyser, CompileContext* context, Node* node, voi
 
     Node* error = node.try_node.error;
 
+    if (!error.parameter_node.type) {
+        highlighter::error(context, context.current_file, error.range.from, error.range.to, "Caught error must have a type");
+    }
+
+    if (error.parameter_node.vaarg) {
+        highlighter::error(context, context.current_file, error.range.from, error.range.to, "Caught error cannot be variadic");
+    }
+
+    if (error.parameter_node.type.type_node.suffix != "") {
+        switch (error.parameter_node.type.type_node.suffix) {
+        case "*":   highlighter::error(context, context.current_file, error.range.from, error.range.to, "Caught error cannot be a pointer");
+        case "[]":  highlighter::error(context, context.current_file, error.range.from, error.range.to, "Caught error cannot be a slice");
+        case "[N]": highlighter::error(context, context.current_file, error.range.from, error.range.to, "Caught error cannot be an array");
+        }
+    }
+
     analyse_node(analyser, context, error.parameter_node.type);
 
     String error_name = error.parameter_node.name.ident_node.name;
@@ -1009,6 +1029,7 @@ fn void analyse_err(Analyser* analyser, CompileContext* context, Node* node) {
 fn bool always_returns(Analyser* analyser, CompileContext* context, Node* node) {
     switch (node.type) {
     case NodeType.RET:
+    case NodeType.ERR:
         return true;
     case NodeType.FUNCTION:
         return compound_returns(analyser, context, node.function_node.statements);
@@ -1115,8 +1136,27 @@ fn void handle_call(Analyser* analyser, CompileContext* context, Node* node, Str
 
     if (function_info.node.type == NodeType.FUNCTION && function_info.node.function_node.error) {
         if (!analyser.try_block) {
-            highlighter::note(context, function_info.file, function_info.node.range.from, function_info.node.range.to, "Definition was here");
-            highlighter::error(context, context.current_file, node.range.from, node.range.to, "'%s' can return an error, surround it with a try-catch", name);
+            if (!analyser.function.function_node.error) {
+                highlighter::note(context, function_info.file, function_info.node.range.from, function_info.node.range.to, "Definition was here");
+                highlighter::error(context, context.current_file, node.range.from, node.range.to, "'%s' can return an error, surround it with a try-catch or make this function throw the same error", name);
+            }
+
+            String expected_name = function_info.node.function_node.error.path_node.path;
+            String actual_name   = analyser.function.function_node.error.path_node.path;
+
+            if (expected_name != actual_name) {
+                highlighter::note(context, function_info.file, function_info.node.range.from, function_info.node.range.to, "Definition was here");
+                highlighter::error(context, context.current_file, analyser.function.function_node.error.range.from, analyser.function.function_node.error.range.to, "Expected error type '%s', got '%s'", expected_name, actual_name);
+            }
+        } else {
+            Node*  catch_err     = analyser.try_block.try_node.error;
+            String expected_name = function_info.node.function_node.error.path_node.path;
+            String actual_name   = catch_err.parameter_node.type.type_node.name.path_node.path;
+        
+            if (expected_name != actual_name) {
+                highlighter::note(context, function_info.file, function_info.node.range.from, function_info.node.range.to, "Definition was here");
+                highlighter::error(context, context.current_file, catch_err.range.from, catch_err.range.to, "Expected error type '%s', got '%s'", expected_name, actual_name);
+            }
         }
     }
 }

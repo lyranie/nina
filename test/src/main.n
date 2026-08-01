@@ -1,5 +1,33 @@
 mod test.main;
 
+use std.io;
+use std.io.file;
+use std.core.allocator;
+
+use libc;
+
+type FooErr();
+
 int main() {
+    try {
+        other();
+    } catch (FooErr e) {
+        
+    }
+
+    try {
+        io.printn(file.read_text(&allocator.heap(), "hellos.txt"));
+    } catch (FileReadErr e) {
+        libc.printf("Failed to read file: '%s': %s\n", e.filename.ptr, e.message.ptr);
+    }
+
     ret 0;
+}
+
+void test() : FooErr {
+    err FooErr();
+}
+
+void other() : FooErr {
+    test();
 }

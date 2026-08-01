@@ -1,0 +1,4 @@
+mod execinfo;
+
+ext int  backtrace(void** buffer, int size);
+ext void backtrace_symbols_fd(void** buffer, int size, int fd);
