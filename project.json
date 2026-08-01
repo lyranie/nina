@@ -18,5 +18,6 @@
         }
     },
     "cpu": "generic",
-    "opt": "O0"
+    "opt": "O0",
+    "linker": "builtin"
 }

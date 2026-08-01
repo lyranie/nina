@@ -525,6 +525,8 @@ fn void analyse_unary(Analyser* analyser, CompileContext* context, Node* node) {
     String        type      = type_data.type_name;
     String        group     = type_data.type_group;
 
+    analyse_node(analyser, context, node.unary_node.node);
+
     switch (node.unary_node.operator.type) {
     case TokenType.PLUS:
     case TokenType.MINUS:
