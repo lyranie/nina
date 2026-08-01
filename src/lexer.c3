@@ -58,61 +58,50 @@ fn void tokenize(Lexer* lexer, CompileContext* context) {
 
         Range start_range = lexer.range;
 
-        if (lexer.current == '/' && peek(lexer) == '/') {
-            line_comment(lexer);
-        } else if (lexer.current == '/' && peek(lexer) == '*') {
-            block_comment(lexer);
-        } else if (lexer.current.is_alpha() || lexer.current == '_' || lexer.current == '$') {
-            word(lexer, context);
-        } else if (lexer.current.is_digit()) {
-            number(lexer, context);
-        } else if (lexer.current == '"') {
-            string(lexer, context);
-        } else if (lexer.current == '\'') {
-            character(lexer, context);
-        } else if (lexer.current == '.' && peek(lexer) == '.' && peek(lexer, 2) == '.') {
-            make_token(lexer, TokenType.ELLIPSE, "...");
-        } else if (lexer.current == '|' && peek(lexer) == '|') {
-            make_token(lexer, TokenType.OR, "||");
-        } else if (lexer.current == '&' && peek(lexer) == '&') {
-            make_token(lexer, TokenType.AND, "&&");
-        } else if (lexer.current == '=' && peek(lexer) == '=') {
-            make_token(lexer, TokenType.IS_EQUAL, "==");
-        } else if (lexer.current == '!' && peek(lexer) == '=') {
-            make_token(lexer, TokenType.NOT_EQUAL, "!=");
-        } else if (lexer.current == '>' && peek(lexer) == '=') {
-            make_token(lexer, TokenType.GTE, ">=");
-        } else if (lexer.current == '<' && peek(lexer) == '=') {
-            make_token(lexer, TokenType.LTE, "<=");
-        } else if (lexer.current == '<' && peek(lexer) == '<') {
-            make_token(lexer, TokenType.SHL, "<<");
-        } else if (lexer.current == '>' && peek(lexer) == '>') {
-            make_token(lexer, TokenType.SHR, ">>");
-        } else {
-            switch (lexer.current) {
-            case ';': make_token(lexer, TokenType.SEMI, ";");
-            case '(': make_token(lexer, TokenType.LPAREN, "(");
-            case ')': make_token(lexer, TokenType.RPAREN, ")");
-            case '[': make_token(lexer, TokenType.LBRACKET, "[");
-            case ']': make_token(lexer, TokenType.RBRACKET, "]");
-            case '{': make_token(lexer, TokenType.LBRACE, "{");
-            case '}': make_token(lexer, TokenType.RBRACE, "}");
-            case '<': make_token(lexer, TokenType.LANGLE, "<");
-            case '>': make_token(lexer, TokenType.RANGLE, ">");
-            case '+': make_token(lexer, TokenType.PLUS, "+");
-            case '-': make_token(lexer, TokenType.MINUS, "-");
-            case '*': make_token(lexer, TokenType.ASTERISK, "*");
-            case '/': make_token(lexer, TokenType.SLASH, "/");
-            case '=': make_token(lexer, TokenType.EQUALS, "=");
-            case '.': make_token(lexer, TokenType.PERIOD, ".");
-            case ',': make_token(lexer, TokenType.COMMA, ",");
-            case '&': make_token(lexer, TokenType.AMP, "&");
-            case '!': make_token(lexer, TokenType.BANG, "!");
-            case ':': make_token(lexer, TokenType.COLON, ":");
-            case '|': make_token(lexer, TokenType.PIPE, "|");
-            case '^': make_token(lexer, TokenType.CARET, "^");
-            case '~': make_token(lexer, TokenType.TILDA, "~");
-            }
+        switch {
+        case lexer.current == '/' && peek(lexer) == '/': line_comment(lexer);
+        case lexer.current == '/' && peek(lexer) == '*': block_comment(lexer);
+
+        case lexer.current == '_' ||
+             lexer.current == '$' ||
+             lexer.current.is_alpha(): word(lexer, context);
+        case lexer.current.is_digit(): number(lexer, context);
+        case lexer.current == '"':     string(lexer, context);
+        case lexer.current == '\'':    character(lexer, context);
+
+        case lexer.current == '.' && peek(lexer) == '.' && peek(lexer, 2) == '.': make_token(lexer, TokenType.ELLIPSE, "...");
+
+        case lexer.current == '|' && peek(lexer) == '|': make_token(lexer, TokenType.OR, "||");
+        case lexer.current == '&' && peek(lexer) == '&': make_token(lexer, TokenType.AND, "&&");
+        case lexer.current == '=' && peek(lexer) == '=': make_token(lexer, TokenType.IS_EQUAL, "==");
+        case lexer.current == '!' && peek(lexer) == '=': make_token(lexer, TokenType.NOT_EQUAL, "!=");
+        case lexer.current == '>' && peek(lexer) == '=': make_token(lexer, TokenType.GTE, ">=");
+        case lexer.current == '<' && peek(lexer) == '=': make_token(lexer, TokenType.LTE, "<=");
+        case lexer.current == '<' && peek(lexer) == '<': make_token(lexer, TokenType.SHL, "<<");
+        case lexer.current == '>' && peek(lexer) == '>': make_token(lexer, TokenType.SHR, ">>");
+
+        case lexer.current == ';': make_token(lexer, TokenType.SEMI, ";");
+        case lexer.current == '(': make_token(lexer, TokenType.LPAREN, "(");
+        case lexer.current == ')': make_token(lexer, TokenType.RPAREN, ")");
+        case lexer.current == '[': make_token(lexer, TokenType.LBRACKET, "[");
+        case lexer.current == ']': make_token(lexer, TokenType.RBRACKET, "]");
+        case lexer.current == '{': make_token(lexer, TokenType.LBRACE, "{");
+        case lexer.current == '}': make_token(lexer, TokenType.RBRACE, "}");
+        case lexer.current == '<': make_token(lexer, TokenType.LANGLE, "<");
+        case lexer.current == '>': make_token(lexer, TokenType.RANGLE, ">");
+        case lexer.current == '+': make_token(lexer, TokenType.PLUS, "+");
+        case lexer.current == '-': make_token(lexer, TokenType.MINUS, "-");
+        case lexer.current == '*': make_token(lexer, TokenType.ASTERISK, "*");
+        case lexer.current == '/': make_token(lexer, TokenType.SLASH, "/");
+        case lexer.current == '=': make_token(lexer, TokenType.EQUALS, "=");
+        case lexer.current == '.': make_token(lexer, TokenType.PERIOD, ".");
+        case lexer.current == ',': make_token(lexer, TokenType.COMMA, ",");
+        case lexer.current == '&': make_token(lexer, TokenType.AMP, "&");
+        case lexer.current == '!': make_token(lexer, TokenType.BANG, "!");
+        case lexer.current == ':': make_token(lexer, TokenType.COLON, ":");
+        case lexer.current == '|': make_token(lexer, TokenType.PIPE, "|");
+        case lexer.current == '^': make_token(lexer, TokenType.CARET, "^");
+        case lexer.current == '~': make_token(lexer, TokenType.TILDA, "~");
         }
 
         if (!core::range_compare(lexer.range, start_range)) {
