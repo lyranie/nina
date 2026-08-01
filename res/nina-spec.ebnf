@@ -71,6 +71,7 @@ top_level_statement
 	|   use_decl
 	|   struct_decl
 	|   base_decl
+	|   const_decl
 
 path
     ::= IDENT (PERIOD IDENT)*
@@ -255,6 +256,9 @@ repeated_op
 
 cast_op
     ::= KW_AS type
+
+const_decl
+    ::= KW_CONST type IDENT EQUALS expr SEMI
 
 try_stmt
     ::= KW_TRY compound KW_CATCH LPAREN parameter RPAREN compound

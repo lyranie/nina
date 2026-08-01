@@ -230,7 +230,6 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
                 ? "array"
                 : "";
         // small fix for now; fix in refactor/self-host
-        @todo("find a better way to determine type group");
         if (type_group == "") {
             switch (type_name) {
             case "int":    type_group = "integer";
@@ -896,7 +895,6 @@ fn FieldResult get_field(CompileContext* context, Scope* scope, LookupElement ba
         }
     }
 
-    @todo("check if group is slice");
     if (base.type_name.ends_with("[]") || base.type_name.ends_with("[N]") || base.type_name == "String") {
         switch (field_name) {
         case "len": return { .lookup_element = { .type_name = "int", .type_group = "integer" } };
