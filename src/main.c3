@@ -39,7 +39,9 @@ fn void main(String[] argv)
 }
 
 fn void compile(CompileContext* context) => @pool() {
-    add_stdlib(context);
+    if (!context.args.no_stdlib) {
+        add_stdlib(context);
+    }
 
     foreach (String file : context.args.files) {
         String? path = file.to_tpath().absolute(context.alloc).copy(context.alloc);
@@ -190,7 +192,7 @@ fn void remove_unused(CompileContext* context) => @pool() {
 
         String? path = module_to_path.get(mod_name);
         if (catch err = path) {
-            highlighter::panic();
+            continue;
         }
 
         Node* imported_ast = context.trees.get(path)!!;

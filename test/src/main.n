@@ -1,33 +1,22 @@
 mod test.main;
 
 use std.io;
-use std.io.file;
-use std.core.allocator;
-
-use libc;
-
-type FooErr();
+use std.core.string.builder;
+use std.core.allocator.arena;
 
 int main() {
-    try {
-        other();
-    } catch (FooErr e) {
-        
-    }
+    Arena alloc = arena.create(64 * 1024);
 
-    try {
-        io.printn(file.read_text(&allocator.heap(), "hellos.txt"));
-    } catch (FileReadErr e) {
-        libc.printf("Failed to read file: '%s': %s\n", e.filename.ptr, e.message.ptr);
-    }
+    StringBuilder builder = builder.create(&alloc);
+
+    builder.append(&builder, "Test");
+    // builder.append(&builder, 5);
+    builder.append(&builder, true);
+
+    io.printn(builder.to_string(&builder));
+
+    arena.reset(&alloc);
+    arena.free(&alloc);
 
     ret 0;
-}
-
-void test() : FooErr {
-    err FooErr();
-}
-
-void other() : FooErr {
-    test();
 }

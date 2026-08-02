@@ -49,7 +49,15 @@ fn bool compare_type(CompileContext* context, Node* node, Node* other, Scope* sc
     TypeInfo* node_type_info  = get_type_info(context, node_data.type_name);
     TypeInfo* other_type_info = get_type_info(context, other_data.type_name);
 
-    if (node_data.type_group == other_data.type_group) {
+    if (other_data.type_name == "void[]" && (node_data.type_name.ends_with("[]") || node_data.type_name.ends_with("]"))) {
+        return true;
+    }
+
+    if (node_data.type_name == "void[]" && (other_data.type_name.ends_with("[]") || other_data.type_name.ends_with("]"))) {
+        return true;
+    }
+
+    if (node_data.type_group == other_data.type_group && node_data.type_group != "struct") {
         return true;
     }
 
@@ -647,16 +655,18 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         return { llvm_type, llvm_debug_type, type_name, type_group };
     case NodeType.ARRAY:
         LookupElement element_data;
+        TypeInfo* element_type_info;
 
         if (node.array_node.values.len() > 0) {
             element_data = get(context, node.array_node.values[0], scope, generator);
+            element_type_info = get_type_info(context, element_data.type_name);
         } else {
-            TypeInfo* void_info = get_type_info(context, "void");
-            element_data = { void_info.llvm_type, null, "void", "void" };
+            element_type_info = get_type_info(context, "void");
+            element_data = { element_type_info.llvm_type, null, "void", "void" };
         }
 
         LLVMTypeRef     llvm_type       = llvm::slice_type(element_data.llvm_type);
-        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, null, element_data.llvm_debug_type);
+        LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, element_type_info, element_data.llvm_debug_type);
         String          type_name       = string::format(context.alloc, "%s[]", element_data.type_name);
         String          type_group      = "pointer";
 
@@ -757,7 +767,7 @@ fn LLVMMetadataRef create_debug_type(CompileContext* context, Generator* generat
             LLVMMetadataRef ptr_type = llvm::di_builder_create_pointer_type(generator.llvm_debug_builder, null, 64, 0, 0, null, 0);
             LLVMMetadataRef len_type = llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "int", 3, 32, 5, LLVMDIFlags.DI_FLAG_ZERO);
             LLVMMetadataRef[] members = {
-                llvm::di_builder_create_member_type(generator.llvm_debug_builder, null, "char*", 5, generator.llvm_debug_file, 0, 64, 64, 0, LLVMDIFlags.DI_FLAG_ZERO, ptr_type),
+                llvm::di_builder_create_member_type(generator.llvm_debug_builder, null, (CChar*)type_info.name.ptr, type_info.name.len, generator.llvm_debug_file, 0, 64, 64, 0, LLVMDIFlags.DI_FLAG_ZERO, ptr_type),
                 llvm::di_builder_create_member_type(generator.llvm_debug_builder, null, "len", 3, generator.llvm_debug_file, 0, 32, 32, 64, LLVMDIFlags.DI_FLAG_ZERO, len_type)
             };
 

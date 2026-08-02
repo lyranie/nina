@@ -22,6 +22,7 @@ struct Args {
     bool           no_libc;
     bool           no_debug;
     bool           no_linker;
+    bool           no_stdlib;
     String         output;
     StringList     linked_libs;
     StringList     warnings;

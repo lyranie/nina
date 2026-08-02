@@ -136,7 +136,7 @@ fn void* generate_node(Generator* generator, CompileContext* context, Node* node
     case NodeType.SWITCH:             generate_switch(generator, context, node, data);
     case NodeType.BREAK:              generate_break(generator, context, node);
     case NodeType.INDEX:       return generate_index(generator, context, node);
-    case NodeType.ARRAY:       return generate_array(generator, context, node);
+    case NodeType.ARRAY:       return generate_array(generator, context, node, data);
     case NodeType.TRAP:               generate_trap(generator, context, node);
     case NodeType.CAST:        return generate_cast(generator, context, node, data);
     case NodeType.SLICE:       return generate_slice(generator, context, node);
@@ -230,7 +230,12 @@ fn void generate_ret(Generator* generator, CompileContext* context, Node* node, 
     if (value) {
         LLVMValueRef llvm_value = generate_node(generator, context, value, data);
 
-        if (context.current_function.function_node.error && generator.function.function_node.name.ident_node.name != "main") {
+        bool is_rethrow = value.type == NodeType.CALL
+            && lookup::get_function_info(context, value.call_node.name.path_node.path).node.type == NodeType.FUNCTION
+            && lookup::get_function_info(context, value.call_node.name.path_node.path).node.function_node.error
+            && generator.function.function_node.error;
+
+        if (context.current_function.function_node.error && generator.function.function_node.name.ident_node.name != "main" && !is_rethrow) {
             llvm_value = make_optional(generator, context, llvm_value, null);
         }
 
@@ -1114,21 +1119,25 @@ fn LLVMValueRef generate_init(Generator* generator, CompileContext* context, Nod
     String name      = node.init_node.name.path_node.path;
     String full_name = string::tformat("%s.%s", generator.module_name, name);
 
+    TypeInfo*   type_info   = lookup::get_type_info(context, name);
+    LLVMTypeRef struct_type = type_info.llvm_type;
+
     List{LLVMValueRef} arguments;
     arguments.tinit();
 
     bool constant = true;
-    foreach (Node* argument : node.init_node.arguments) {
-        LLVMValueRef argument_llvm_value = generate_node(generator, context, argument);
+    foreach (uint i, Node* argument : node.init_node.arguments) {
+        Node*         field_type_node = type_info.node.struct_node.fields[i].parameter_node.type;
+        LookupElement field_type_info = lookup::get(context, field_type_node, generator.scope, generator);
+        LLVMTypeRef   field_type      = field_type_info.llvm_type;
+
+        LLVMValueRef argument_llvm_value = generate_node(generator, context, argument, (void*)field_type);
         arguments.push(argument_llvm_value);
 
         if (!llvm::is_constant(argument_llvm_value)) {
             constant = false;
         }
     }
-
-    TypeInfo*   type_info   = lookup::get_type_info(context, name);
-    LLVMTypeRef struct_type = type_info.llvm_type;
 
     if (constant) {
         return llvm::const_named_struct(struct_type, arguments.to_array(context.alloc), (CUInt)arguments.len());
@@ -1432,8 +1441,20 @@ fn LLVMValueRef generate_assign(Generator* generator, CompileContext* context, N
                 highlighter::panic();
             }
 
+            uint array_length = llvm::get_array_length(target_data.llvm_type);
+            LLVMValueRef len_value = create_int(llvm::int_32_type(), (ulong)array_length);
+            emit_bounds_check(generator, context, index_value, len_value, (uint)target.range.from.line);
+
             LLVMValueRef[2] gep_indices = { create_int(llvm::int_32_type(), 0), index_value };
             target_ptr = llvm::build_gep2(generator.llvm_builder, target_data.llvm_type, array_ptr, &gep_indices, 2, "");
+        } else if (target_data.type_name == "String") {
+            data_ptr = llvm::build_extract_value(generator.llvm_builder, target_value, 0, "");
+
+            LLVMValueRef len_value = llvm::build_extract_value(generator.llvm_builder, target_value, 1, "");
+
+            emit_bounds_check(generator, context, index_value, len_value, (uint)target.range.from.line);
+
+            target_ptr = llvm::build_gep2(generator.llvm_builder, element_type_info.llvm_type, data_ptr, &index_value, 1, "");
         } else {
             data_ptr = target_value;
             target_ptr = llvm::build_gep2(generator.llvm_builder, element_type_info.llvm_type, data_ptr, &index_value, 1, "");
@@ -1726,6 +1747,10 @@ fn LLVMValueRef generate_index(Generator* generator, CompileContext* context, No
 
         TypeInfo* array_type_info = lookup::get_type_info(context, target_data.type_name);
 
+        uint array_length = llvm::get_array_length(target_data.llvm_type);
+        LLVMValueRef len_value = create_int(llvm::int_32_type(), (ulong)array_length);
+        emit_bounds_check(generator, context, index_value, len_value, (uint)node.range.from.line);
+
         LLVMValueRef[2] gep_indices = { create_int(llvm::int_32_type(), 0), index_value };
         LLVMValueRef target_ptr = llvm::build_gep2(generator.llvm_builder, target_data.llvm_type, array_ptr, &gep_indices, 2, "");
 
@@ -1736,6 +1761,9 @@ fn LLVMValueRef generate_index(Generator* generator, CompileContext* context, No
     if (target_data.type_name == "String") {
         LLVMValueRef target_value = generate_node(generator, context, node.index_node.target);
         LLVMValueRef data_ptr = llvm::build_extract_value(generator.llvm_builder, target_value, 0, "");
+        LLVMValueRef len_value = llvm::build_extract_value(generator.llvm_builder, target_value, 1, "");
+
+        emit_bounds_check(generator, context, index_value, len_value, (uint)node.range.from.line);
 
         LLVMValueRef target_ptr = llvm::build_gep2(generator.llvm_builder, element_type_info.llvm_type, data_ptr, &index_value, 1, "");
 
@@ -1750,11 +1778,15 @@ fn LLVMValueRef generate_index(Generator* generator, CompileContext* context, No
     return llvm::build_load_2(generator.llvm_builder, element_type_info.llvm_type, target_ptr, "");
 }
 
-fn LLVMValueRef generate_array(Generator* generator, CompileContext* context, Node* node) {
+fn LLVMValueRef generate_array(Generator* generator, CompileContext* context, Node* node, void* data) {
     LookupElement array_data   = lookup::get(context, node, generator.scope, generator);
     String        element_name = array_data.type_name[:array_data.type_name.len - 2];
     TypeInfo*     element_info  = lookup::get_type_info(context, element_name);
     LLVMTypeRef   element_type  = element_info.llvm_type;
+
+    if (node.array_node.values.len() == 0 && data) {
+        element_type = (LLVMTypeRef)data;
+    }
 
     debug::set_location(generator, context, node.range.from.line, node.range.from.column);
 

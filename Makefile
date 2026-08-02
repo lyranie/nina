@@ -39,5 +39,5 @@ test-stdlib: all
 clean:
 	rm -rf build
 
-test: all
+test: debug
 	./build/nina compile test/src/main.n --ir

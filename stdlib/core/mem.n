@@ -1,7 +1,14 @@
 mod std.core.mem;
 
-use libc;
-
 void* copy(void* dst, void* src, int len) {
-    ret libc.memcpy(dst, src, len);
+    char* d = dst as char*;
+    char* s = src as char*;
+
+    int i = 0;
+
+    while (i < len) {
+        d[i] = s[i++];
+    }
+
+    ret dst;
 }

@@ -53,3 +53,11 @@ str copy(str s, Allocator alloc) {
 long write(File out, String s) {
     ret -1;
 }
+
+String from_bool(bool b) {
+    if (b) {
+        ret "true";
+    }
+
+    ret "false";
+}

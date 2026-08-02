@@ -1,0 +1,55 @@
+mod std.core.string.builder;
+
+use std.core.mem;
+use std.core.string;
+use std.core.allocator.arena;
+
+type StringBuilder(
+    char*  data,
+    int    len_data,
+    int    capacity,
+    Arena* alloc
+);
+
+StringBuilder create(Arena* alloc) {
+    int   capacity = 64;
+    char* data     = arena.alloc(alloc, capacity * char.$size, char.$size);
+
+    ret new StringBuilder(data, 0, capacity, alloc);
+}
+
+void appendn(StringBuilder* builder, any value) {
+    append(builder, value);
+    push(builder, "\n");
+}
+
+void append(StringBuilder* builder, any value) {
+    switch (value.$typeid) {
+    case String.$typeid: push(builder, value.$data as String);
+    case bool.$typeid:   push(builder, string.from_bool(value.$data));
+    }
+}
+
+void grow(StringBuilder* builder, int number) {
+    builder.capacity = builder.capacity + number;
+
+    char* new_data = arena.alloc(builder.alloc, builder.capacity * char.$size, char.$size);
+    mem.copy(new_data, builder.data, builder.len_data);
+
+    builder.data = new_data;
+}
+
+void push(StringBuilder* builder, String value) {
+    int new_len = builder.len_data + value.len;
+
+    if (new_len >= builder.capacity) {
+        grow(builder, value.len);
+    }
+
+    mem.copy(builder.data + builder.len_data, value.ptr, value.len);
+    builder.len_data = new_len;
+}
+
+String to_string(StringBuilder* builder) {
+    ret builder.data[0: builder.len_data] as String;
+}

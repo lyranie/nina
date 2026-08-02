@@ -61,6 +61,8 @@ fn void parse(Args* args, String[] argv) {
             args.no_debug = true;
         case "--no-link":
             args.no_linker = true;
+        case "--no-stdlib":
+            args.no_stdlib = true;
         case "--help":
         case "-h":
             print_help(argv[0]);
