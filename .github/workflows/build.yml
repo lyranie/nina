@@ -21,12 +21,9 @@ jobs:
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 21
+          echo "/usr/lib/llvm-21/lib" | sudo tee /etc/ld.so.conf.d/llvm-21.conf
+          sudo ldconfig
           echo "/usr/lib/llvm-21/bin" >> "$GITHUB_PATH"
-
-      - name: Debug LLVM libs
-        run: |
-          find / -iname "*libLLVM*" 2>/dev/null
-          dpkg -l | grep -i llvm
 
       - name: Install C3 compiler
         id: install_c3
