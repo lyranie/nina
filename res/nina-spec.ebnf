@@ -12,7 +12,7 @@ KW_EXT      ::= ext
 KW_USE      ::= use
 KW_IF       ::= if
 KW_ELSE     ::= else
-KW_TYPE     ::= type
+KW_REC      ::= rec
 KW_NEW      ::= new
 KW_WHILE    ::= while
 KW_BASE     ::= base
@@ -26,6 +26,7 @@ KW_CONST    ::= conts
 KW_TRY      ::= try
 KW_CATCH    ::= catch
 KW_ERR      ::= err
+KW_SKIP     ::= skip
 TRUE        ::= true
 FALSE       ::= false
 NULL        ::= null
@@ -101,7 +102,7 @@ type
     ::= path (ASTERISK | LBRACKET expr? RBRACKET)*
 
 struct_decl
-    ::= KW_TYPE IDENT fields (COLON path)? SEMI
+    ::= KW_REC IDENT fields (COLON path)? SEMI
 
 fields
     ::= LPAREN (field (COMMA field)*)? RPAREN
@@ -126,6 +127,7 @@ compound_statement
     |   trap_stmt
     |   try_stmt
     |   err_stmt
+	|   skip_stmt
 
 ret_stmt
     ::= KW_RET expr? SEMI
@@ -265,3 +267,6 @@ try_stmt
 
 err_stmt
     ::= KW_ERR path arguments SEMI
+
+skip_stmt
+    ::= KW_SKIP SEMI
