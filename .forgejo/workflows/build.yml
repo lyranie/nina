@@ -1,0 +1,53 @@
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    name: ${{ matrix.os }}-${{ matrix.version }}
+    runs-on: codeberg-tiny
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+        version: [ latest ]
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+
+      - name: Install LLVM 21
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+          echo "/usr/lib/llvm-21/lib" | sudo tee /etc/ld.so.conf.d/llvm-21.conf
+          sudo ldconfig
+          echo "/usr/lib/llvm-21/bin" >> "$GITHUB_PATH"
+
+      - name: Install C3 compiler
+        id: install_c3
+        uses: https://codeberg.org/lyranie/setup-c3@main
+        with:
+          version: 0.8.2
+
+      - run: c3c build
+
+      - name: Package binary with stdlib
+        run: |
+          mkdir -p dist/release
+          cp build/nina dist/release/
+          cp -r stdlib dist/release/stdlib
+          cd dist/release
+          zip -r release-${{ matrix.os }}-${{ matrix.version }}.zip nina stdlib
+          rm -rf nina stdlib
+
+      - uses: https://code.forgejo.org/actions/forgejo-release@v2
+        with:
+          direction: upload
+          url: ${{ github.server_url }}
+          repo: ${{ github.repository }}
+          token: ${{ secrets.RELEASE_TOKEN }}
+          tag: latest
+          release-dir: dist/release
+          release-notes: "Automated build"

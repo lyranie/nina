@@ -9,6 +9,7 @@
     "test-sources":  [ "test/**" ],
     "build-dir": "build",
     "output": "build",
+    "linker-search-paths": [ "/usr/lib/llvm-21/lib" ],
     "targets": {
         "nina": {
             "type": "executable"
