@@ -99,7 +99,7 @@ enum TokenType {
     KW_USE,
     KW_IF,
     KW_ELSE,
-    KW_TYPE,
+    KW_REC,
     KW_NEW,
     KW_WHILE,
     KW_BASE,
@@ -113,6 +113,7 @@ enum TokenType {
     KW_TRY,
     KW_CATCH,
     KW_ERR,
+    KW_SKIP,
 
     SEMI,
     LPAREN,
@@ -367,6 +368,7 @@ enum NodeType {
     CONST,
     TRY,
     ERR,
+    SKIP,
 }
 
 struct FunctionSignature {

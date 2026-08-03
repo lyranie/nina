@@ -177,7 +177,7 @@ fn void word(Lexer* lexer, CompileContext* context) => @pool() {
     case "use":     type = TokenType.KW_USE;
     case "if":      type = TokenType.KW_IF;
     case "else":    type = TokenType.KW_ELSE;
-    case "type":    type = TokenType.KW_TYPE;
+    case "rec":     type = TokenType.KW_REC;
     case "new":     type = TokenType.KW_NEW;
     case "null":    type = TokenType.NULL;
     case "while":   type = TokenType.KW_WHILE;
@@ -192,6 +192,7 @@ fn void word(Lexer* lexer, CompileContext* context) => @pool() {
     case "try":     type = TokenType.KW_TRY;
     case "catch":   type = TokenType.KW_CATCH;
     case "err":     type = TokenType.KW_ERR;
+    case "skip":    type = TokenType.KW_SKIP;
     default:        type = TokenType.IDENT;
     }
 

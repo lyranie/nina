@@ -4,7 +4,7 @@ use std.core.mem;
 use std.core.string;
 use std.core.allocator.arena;
 
-type StringBuilder(
+rec StringBuilder(
     char*  data,
     int    len_data,
     int    capacity,

@@ -187,7 +187,7 @@ fn String get_token_value(TokenType type) {
     case TokenType.KW_USE:     return "\"use\"";
     case TokenType.KW_IF:      return "\"if\"";
     case TokenType.KW_ELSE:    return "\"else\"";
-    case TokenType.KW_TYPE:    return "\"type\"";
+    case TokenType.KW_REC:     return "\"rec\"";
     case TokenType.KW_NEW:     return "\"new\"";
     case TokenType.KW_WHILE:   return "\"while\"";
     case TokenType.KW_BASE:    return "\"base\"";

@@ -2,8 +2,8 @@ mod std.core.allocator.arena;
 
 use std.os.linux;
 
-type Page(char* memory, int total, int used, Page* prev);
-type Arena(Page* page, Page* unused_page, int page_size);
+rec Page(char* memory, int total, int used, Page* prev);
+rec Arena(Page* page, Page* unused_page, int page_size);
 
 char* map_pages(int size) {
     char* result = linux.mmap(null, size, 3, 34, -1, 0);

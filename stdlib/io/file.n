@@ -4,7 +4,7 @@ use std.core.allocator.arena;
 use std.core.string;
 use libc;
 
-type File(int fd);
+rec File(int fd);
 
 const int O_RDONLY = 0;
 const int O_WRONLY = 1;
@@ -19,7 +19,7 @@ const int SEEK_END = 2;
 
 const int DEFAULT_MODE = 420;
 
-type FileReadErr(String filename, String message);
+rec FileReadErr(String filename, String message);
 
 int errno() {
     ret *libc.__errno_location();

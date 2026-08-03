@@ -40,7 +40,7 @@ fn void parse_mod(Parser* parser, CompileContext* context, Lexer* lexer) {
         case TokenType.IDENT:    statements.push(parse_function(parser, context, lexer));
         case TokenType.KW_EXT:   statements.push(parse_ext(parser, context, lexer));
         case TokenType.KW_USE:   statements.push(parse_use(parser, context, lexer));
-        case TokenType.KW_TYPE:  statements.push(parse_struct(parser, context, lexer));
+        case TokenType.KW_REC:   statements.push(parse_struct(parser, context, lexer));
         case TokenType.KW_BASE:  statements.push(parse_base(parser, context, lexer));
         case TokenType.KW_CONST: statements.push(parse_const(parser, context, lexer));
         default:
@@ -232,6 +232,7 @@ fn Node* parse_compound_statement(Parser* parser, CompileContext* context, Lexer
         case TokenType.KW_TRAP:   return parse_trap(parser, context, lexer);
         case TokenType.KW_TRY:    return parse_try(parser, context, lexer);
         case TokenType.KW_ERR:    return parse_err(parser, context, lexer);
+        case TokenType.KW_SKIP:   return parse_skip(parser, context, lexer);
         default:
             highlighter::error(context, context.current_file, parser.current.range.start, parser.current.range.end, "Statement expected, got '%s'", parser.current.type);
         }
@@ -570,7 +571,7 @@ fn Node* parse_if(Parser* parser, CompileContext* context, Lexer* lexer) {
 fn Node* parse_struct(Parser* parser, CompileContext* context, Lexer* lexer) {
     Range start = parser.current.range.start;
 
-    consume(parser, context, lexer, TokenType.KW_TYPE);
+    consume(parser, context, lexer, TokenType.KW_REC);
     
     Node*    name   = parse_identifier(parser, context, lexer);
     NodeList fields = parse_fields(parser, context, lexer);
@@ -1065,6 +1066,17 @@ fn Node* parse_err(Parser* parser, CompileContext* context, Lexer* lexer) {
         node.err_node.name      = name;
         node.err_node.arguments = arguments;
     };
+}
+
+fn Node* parse_skip(Parser* parser, CompileContext* context, Lexer* lexer) {
+    Range start = parser.current.range.start;
+
+    consume(parser, context, lexer, TokenType.KW_SKIP);
+    consume(parser, context, lexer, TokenType.SEMI);
+
+    Range end = peek(parser, lexer, -1).range.end;
+
+    return @make_node(context, NodeType.SKIP, start, end; node) {};
 }
 
 fn void consume(Parser* parser, CompileContext* context, Lexer* lexer, TokenType type) {

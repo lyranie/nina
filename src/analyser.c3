@@ -69,6 +69,7 @@ fn void analyse_node(Analyser* analyser, CompileContext* context, Node* node, vo
     case NodeType.CONST:       analyse_const(analyser, context, node);
     case NodeType.TRY:         analyse_try(analyser, context, node, data);
     case NodeType.ERR:         analyse_err(analyser, context, node);
+    case NodeType.SKIP:        break;
     default:
         highlighter::panic("Missing analyser function for type '%s'", node.type);
     }

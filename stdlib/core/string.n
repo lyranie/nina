@@ -3,7 +3,7 @@ mod std.core.string;
 use std.core.allocator.arena;
 use std.io;
 
-type OutOfBoundsErr();
+rec OutOfBoundsErr();
 
 int index_of(String s, char c) {
     char* t = s.ptr;
