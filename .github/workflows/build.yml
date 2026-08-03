@@ -1,0 +1,42 @@
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    name: ${{ matrix.os }}-${{ matrix.version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+        version: [ latest ]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install C3 compiler
+        id: install_c3
+        uses: ManuLinares/setup-c3@main
+        with:
+          version: 0.8.2
+
+      - run: c3c build
+
+      - name: Package binary with stdlib
+        run: |
+          mkdir -p dist/release
+          cp build/nina dist/release/
+          cp -r stdlib dist/release/stdlib
+          cd dist/release
+          zip -r release-${{ matrix.os }}-${{ matrix.version }}.zip nina stdlib
+          rm -rf nina stdlib
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          files: dist/release/*
+          body: "Automated build"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
