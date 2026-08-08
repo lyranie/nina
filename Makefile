@@ -41,3 +41,6 @@ clean:
 
 test: debug
 	./build/nina compile test/src/main.n --ir
+
+test-nir: debug
+	./build/nina compile test/src/nir.n --ir

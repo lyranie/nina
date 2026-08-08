@@ -1,0 +1,9 @@
+mod test.nir;
+
+int main() {
+    ret 0;
+}
+
+int test() {
+    ret 69;
+}

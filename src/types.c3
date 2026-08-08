@@ -1,5 +1,6 @@
 module nina::types;
 
+import nir;
 import llvm;
 
 import std::collections::list;
@@ -410,11 +411,12 @@ struct FunctionInfo {
 }
 
 struct VariableInfo {
-    String       name;
-    Node*        node;
-    bool         used;
-    LLVMTypeRef  llvm_type;
-    LLVMValueRef llvm_value;
+    String        name;
+    Node*         node;
+    bool          used;
+    LLVMTypeRef   llvm_type;
+    LLVMValueRef  llvm_value;
+    NirStatement* nir_statement;
 }
 
 struct TypeInfo {
@@ -425,6 +427,7 @@ struct TypeInfo {
     TypeInfo*    base;
     LLVMTypeRef  llvm_type;
     LLVMValueRef llvm_value;
+    NirType      nir_type;
 }
 
 struct ConstInfo {
@@ -444,6 +447,7 @@ struct LookupElement {
     LLVMMetadataRef llvm_debug_type;
     String          type_name;
     String          type_group;
+    NirType         nir_type;
 }
 
 struct Type {
@@ -451,6 +455,7 @@ struct Type {
     String      filepath;
     Node*       node;
     LLVMTypeRef llvm_type;
+    NirType     nir_type;
 }
 
 union FieldResult {
@@ -469,6 +474,7 @@ struct Generator {
     List{LLVMBasicBlockRef} break_targets;
     Node*                   try_block;
     Node*                   function;
+    NirBuilder*             nir_builder;
 }
 
 struct Linker {

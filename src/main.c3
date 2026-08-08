@@ -28,7 +28,8 @@ fn void main(String[] argv)
 
     switch (context.args.cmd) {
     case CompileCommand.COMPILE:
-        compile(context);
+        // compile(context);
+        compile_nir(context);
     default:
         highlighter::panic();
     }
@@ -36,6 +37,41 @@ fn void main(String[] argv)
     profiler::end(context.profiler);
 
     core::context_free(context);
+}
+
+fn void compile_nir(CompileContext* context) => @pool() {
+    String file = context.args.files.get(0);
+    String path = file.to_tpath().absolute(context.alloc).copy(context.alloc)!!;
+
+    profiler::commit(context.profiler, "Lexer");
+    Lexer* lexer = lexer::create(context, path);
+    lexer::tokenize(lexer, context);
+
+    profiler::commit(context.profiler, "Parser");
+    Parser* parser = parser::create(context.alloc, lexer);
+    parser::parse(parser, context, lexer);
+
+    lexer::free(lexer, context.alloc);
+
+    profiler::commit(context.profiler, "Analyser");
+    Analyser* analyser = analyser::create(context, path);
+    analyser::analyse(analyser, context);
+    analyser::free(analyser, context.alloc);
+
+    profiler::commit(context.profiler, "Generator");
+
+    Generator* generator = gen_nir::create(context);
+    gen_nir::generate(generator, context);
+
+    profiler::commit(context.profiler, "Linker");
+
+    if (!context.args.no_linker) {
+        Linker* linker = linker::create(context);
+        linker::link(linker, context);
+        linker::free(linker);
+    }
+
+    profiler::commit(context.profiler, "Cleanup");
 }
 
 fn void compile(CompileContext* context) => @pool() {

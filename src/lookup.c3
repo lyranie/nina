@@ -1,5 +1,6 @@
 module nina::lookup;
 
+import nir;
 import llvm;
 
 import nina::types;
@@ -15,29 +16,30 @@ fn Lookup* create(Allocator alloc, LLVMContextRef llvm_context) {
 
     lookup.init(alloc);
 
-    register_type(lookup, alloc, "int",    "<builtin>", null, llvm::int_32_type());
-    register_type(lookup, alloc, "bool",   "<builtin>", null, llvm::int_1_type());
-    register_type(lookup, alloc, "char",   "<builtin>", null, llvm::int_8_type());
-    register_type(lookup, alloc, "long",   "<builtin>", null, llvm::int_64_type());
-    register_type(lookup, alloc, "real",   "<builtin>", null, llvm::double_type());
-    register_type(lookup, alloc, "void",   "<builtin>", null, llvm::void_type());
-    register_type(lookup, alloc, "String", "<builtin>", null, llvm::slice_type(llvm::int_8_type()));
+    register_type(lookup, alloc, "int",    "<builtin>", null, llvm::int_32_type(), NirTypes.INT_32);
+    register_type(lookup, alloc, "bool",   "<builtin>", null, llvm::int_1_type(), NirTypes.LOGIC);
+    register_type(lookup, alloc, "char",   "<builtin>", null, llvm::int_8_type(), NirTypes.INT_8);
+    register_type(lookup, alloc, "long",   "<builtin>", null, llvm::int_64_type(), NirTypes.INT_64);
+    register_type(lookup, alloc, "real",   "<builtin>", null, llvm::double_type(), {});
+    register_type(lookup, alloc, "void",   "<builtin>", null, llvm::void_type(), NirTypes.VOID);
+    register_type(lookup, alloc, "String", "<builtin>", null, llvm::slice_type(llvm::int_8_type()), NirTypes.STRING);
 
     LLVMTypeRef any_type = llvm::struct_create_named(llvm_context, "any");
     llvm::struct_set_body(any_type, (LLVMTypeRef[]){ llvm::pointer_type(llvm::int_8_type(), 0), llvm::pointer_type(llvm::int_8_type(), 0) }, 2, llvm::FALSE);
 
-    register_type(lookup, alloc, "any", "<builtin>", null, any_type);
+    register_type(lookup, alloc, "any", "<builtin>", null, any_type, {});
 
     return lookup;
 }
 
-fn void register_type(Lookup* lookup, Allocator alloc, String name, String filepath, Node* node, LLVMTypeRef llvm_type) {
+fn void register_type(Lookup* lookup, Allocator alloc, String name, String filepath, Node* node, LLVMTypeRef llvm_type, NirType nir_type) {
     Type* type = alloc::new(alloc, Type);
 
     type.name      = name;
     type.filepath  = filepath;
     type.node      = node;
     type.llvm_type = llvm_type;
+    type.nir_type  = nir_type;
 
     lookup.set(name, type);
 }
@@ -145,6 +147,7 @@ fn TypeInfo* get_type_info(CompileContext* context, String name, Node* node = nu
         type_info.name      = name;
         type_info.node      = type.node;
         type_info.llvm_type = type.llvm_type;
+        type_info.nir_type  = type.nir_type;
     } else {
         foreach (String type_name : context.registry.types.tkeys()) {
             if (type_name == name ||
@@ -208,6 +211,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
 
         TypeInfo*       type_info       = get_type_info(context, name);
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
+        NirType         nir_type        = type_info.nir_type;
         LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
 
         while (type_suffix.ends_with("*") || type_suffix.ends_with("[]") || type_suffix.ends_with("[N]")) {
@@ -281,7 +285,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             type_group = "array";
         }
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, nir_type };
     case NodeType.CALL:
         FunctionInfo* function_info = get_function_info(context, node.call_node.name.path_node.path);
 
@@ -324,7 +328,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             String          type_name       = "bool";
             String          type_group      = "boolean";
 
-            return { llvm_type, llvm_debug_type, type_name, type_group };
+            return { llvm_type, llvm_debug_type, type_name, type_group, {} };
         case TokenType.PLUS:
         case TokenType.MINUS:
             LookupElement left_data = get(context, node.bin_node.left, scope, generator);
@@ -338,7 +342,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
                 String          type_name       = string::format(context.alloc, "%s*", element_name);
                 String          type_group      = "pointer";
 
-                return { llvm_type, llvm_debug_type, type_name, type_group };
+                return { llvm_type, llvm_debug_type, type_name, type_group, {} };
             }
 
             if (node.bin_node.operator.type == TokenType.MINUS && left_data.type_group == "pointer") {
@@ -351,7 +355,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
                     String          type_name       = "long";
                     String          type_group      = "integer";
 
-                    return { llvm_type, llvm_debug_type, type_name, type_group };
+                    return { llvm_type, llvm_debug_type, type_name, type_group, {} };
                 }
             }
 
@@ -362,11 +366,12 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
     case NodeType.INT:
         TypeInfo*       type_info       = get_type_info(context, "int");
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
+        NirType         nir_type        = type_info.nir_type;
         LLVMMetadataRef llvm_debug_type = create_debug_type(context, generator, llvm_type, type_info);
         String          type_name       = "int";
         String          type_group      = "integer";
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, nir_type };
     case NodeType.ACCESS:
         String name = node.access_node.name.path_node.path;
 
@@ -498,7 +503,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         String          type_name       = "String";
         String          type_group      = "string";
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, {} };
     case NodeType.RET:
         if (node.ret_node.value) {
             return get(context, node.ret_node.value, scope, generator);
@@ -510,14 +515,14 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         String          type_name       = "void";
         String          type_group      = "void";
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, {} };
     case NodeType.NULL:
         LLVMTypeRef     llvm_type       = llvm::pointer_type(llvm::int_8_type(), 0);
         LLVMMetadataRef llvm_debug_type = generator ? llvm::di_builder_create_basic_type(generator.llvm_debug_builder, "null", 4, 64, 5, LLVMDIFlags.DI_FLAG_ZERO) : null;
         String          type_name       = "null";
         String          type_group      = "pointer";
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, {} };
     case NodeType.BOOL:
         TypeInfo*       type_info       = get_type_info(context, "bool");
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
@@ -525,7 +530,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         String          type_name       = "bool";
         String          type_group      = "boolean";
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, {} };
     case NodeType.INIT:
         TypeInfo* type_info = get_type_info(context, node.init_node.name.path_node.path);
 
@@ -538,7 +543,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         String          type_name       = name;
         String          type_group      = "struct";
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, {} };
     case NodeType.DEREFERENCE:
         LookupElement type_data = get(context, node.dereference_node.node, scope, generator);
 
@@ -555,7 +560,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
                 String          type_name       = "bool";
                 String          type_group      = "boolean";
 
-                return { llvm_type, llvm_debug_type, type_name, type_group };
+                return { llvm_type, llvm_debug_type, type_name, type_group, {} };
             }
 
             TypeInfo*       type_info       = get_type_info(context, "int");
@@ -564,7 +569,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             String          type_name       = "int";
             String          type_group      = "integer";
 
-            return { llvm_type, llvm_debug_type, type_name, type_group };
+            return { llvm_type, llvm_debug_type, type_name, type_group, {} };
         case LLVMTypeKind.POINTER_TYPE_KIND:
             String    new_type_name = type_data.type_name[:type_data.type_name.len - 1];
             TypeInfo* type_info     = get_type_info(context, new_type_name);
@@ -585,7 +590,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
                 highlighter::panic();
             }
 
-            return { llvm_type, llvm_debug_type, type_name, type_group };
+            return { llvm_type, llvm_debug_type, type_name, type_group, {} };
         case LLVMTypeKind.STRUCT_TYPE_KIND:
             highlighter::panic();
         default:
@@ -599,7 +604,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         String          type_name       = string::format(context.alloc, "%s*", type_data.type_name);
         String          type_group      = "pointer";
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, {} };
     case NodeType.UNARY:
         switch (node.unary_node.operator.type) {
         case TokenType.BANG:
@@ -609,7 +614,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             String          type_name       = "bool";
             String          type_group      = "boolean";
 
-            return { llvm_type, llvm_debug_type, type_name, type_group };
+            return { llvm_type, llvm_debug_type, type_name, type_group, {} };
         default:
             return get(context, node.unary_node.node, scope, generator);
         }
@@ -620,7 +625,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         String          type_name       = "real";
         String          type_group      = "real";
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, {} };
     case NodeType.CHAR:
         TypeInfo*       type_info       = get_type_info(context, "char");
         LLVMTypeRef     llvm_type       = type_info.llvm_type;
@@ -628,7 +633,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         String          type_name       = "char";
         String          type_group      = "character";
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, {} };
     case NodeType.INDEX:
         LookupElement target_data = get(context, node.index_node.target, scope, generator);
 
@@ -662,7 +667,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             highlighter::panic();
         }
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, {} };
     case NodeType.ARRAY:
         LookupElement element_data;
         TypeInfo* element_type_info;
@@ -672,7 +677,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             element_type_info = get_type_info(context, element_data.type_name);
         } else {
             element_type_info = get_type_info(context, "void");
-            element_data = { element_type_info.llvm_type, null, "void", "void" };
+            element_data = { element_type_info.llvm_type, null, "void", "void", {} };
         }
 
         LLVMTypeRef     llvm_type       = llvm::slice_type(element_data.llvm_type);
@@ -680,7 +685,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         String          type_name       = string::format(context.alloc, "%s[]", element_data.type_name);
         String          type_group      = "pointer";
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, {} };
     case NodeType.CAST:
         return get(context, node.cast_node.type, scope, generator);
     case NodeType.SLICE:
@@ -705,7 +710,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         String          type_name       = slice_type_name;
         String          type_group      = "pointer";
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, {} };
     case NodeType.SUFFIX:
         switch (node.suffix_node.operator.type) {
         case TokenType.BANG:
@@ -715,7 +720,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
             String          type_name       = "bool";
             String          type_group      = "boolean";
 
-            return { llvm_type, llvm_debug_type, type_name, type_group };
+            return { llvm_type, llvm_debug_type, type_name, type_group, {} };
         default:
             return get(context, node.suffix_node.node, scope, generator);
         }
@@ -1101,7 +1106,7 @@ fn LookupElement get_builtin(CompileContext* context, String field_name, Generat
         String          type_name       = "int";
         String          type_group      = "integer";
 
-        return { llvm_type, llvm_debug_type, type_name, type_group };
+        return { llvm_type, llvm_debug_type, type_name, type_group, {} };
     default:
         return {};
     }

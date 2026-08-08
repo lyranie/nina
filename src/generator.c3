@@ -256,7 +256,7 @@ fn LLVMValueRef generate_int(Generator* generator, CompileContext* context, Node
         int_type = data;
     }
 
-    return create_int(int_type, node.int_node.number.to_uint())!!;
+    return create_int(int_type, node.int_node.number.to_int())!!;
 }
 
 fn void generate_ext(Generator* generator, CompileContext* context, Node* node) => @pool() {
@@ -2232,7 +2232,7 @@ fn LLVMValueRef build_string_eq(Generator* generator, CompileContext* context, L
     return result;
 }
 
-fn LLVMValueRef create_int(LLVMTypeRef int_type, ulong value) {
+fn LLVMValueRef create_int(LLVMTypeRef int_type, long value) {
     return llvm::const_int(int_type, (CULongLong)value, llvm::TRUE);
 }
 
@@ -2342,7 +2342,7 @@ fn LLVMValueRef make_any(Generator* generator, CompileContext* context, LLVMValu
         LLVMTypeRef i64_type = llvm::int_64_type();
         desc_global = llvm::add_global(generator.llvm_module, i64_type, "");
 
-        llvm::set_initializer(desc_global, create_int(i64_type, combined));
+        llvm::set_initializer(desc_global, create_int(i64_type, (long)combined));
         llvm::set_global_constant(desc_global, llvm::TRUE);
         llvm::set_unnamed_addr(desc_global, llvm::TRUE);
         llvm::set_linkage(desc_global, LLVMLinkage.PRIVATE_LINKAGE);

@@ -1,5 +1,6 @@
 module nina::scope;
 
+import nir;
 import llvm;
 
 import nina::types;
@@ -20,14 +21,15 @@ fn Scope* create(Allocator alloc, Scope* parent = null) {
 
 // -- VARIABLE --
 
-fn void add_variable(Scope* scope, Allocator alloc, String name, Node* node, LLVMTypeRef llvm_type = null, LLVMValueRef llvm_value = null) {
+fn void add_variable(Scope* scope, Allocator alloc, String name, Node* node, LLVMTypeRef llvm_type = null, LLVMValueRef llvm_value = null, NirStatement* nir_statement = null) {
     VariableInfo* variable = alloc::new(alloc, VariableInfo);
 
-    variable.name       = name;
-    variable.node       = node;
-    variable.used       = false;
-    variable.llvm_type  = llvm_type;
-    variable.llvm_value = llvm_value;
+    variable.name          = name;
+    variable.node          = node;
+    variable.used          = false;
+    variable.llvm_type     = llvm_type;
+    variable.llvm_value    = llvm_value;
+    variable.nir_statement = nir_statement;
 
     scope.variables.set(name, variable);
 }
