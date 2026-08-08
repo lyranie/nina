@@ -3,10 +3,10 @@ mod std.core.builtin;
 use execinfo;
 use libc;
 
-void bounds_check(int index, int len, char* file_ptr, int file_len, int line) {
+void bounds_check(int index, int len, String file, int line) {
     if (index < 0 || index >= len) {
         String message = "Panic: index out of bounds (index: %d, len: %d) at %.*s:%d\n";
-        libc.printf(message.ptr, index, len, file_len, file_ptr, line);
+        libc.printf(message.ptr, index, len, file.len, file.ptr, line);
         trap;
     }
 }
@@ -15,5 +15,5 @@ void panic() {
     void*[64] buffer;
     int count = execinfo.backtrace(&buffer, 64);
     execinfo.backtrace_symbols_fd(&buffer, count, 2);
-    libc.exit(1);
+    trap;
 }

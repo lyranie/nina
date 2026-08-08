@@ -1,0 +1,339 @@
+mod std.encoding.json;
+
+use std.io;
+use std.core.mem;
+use std.core.char;
+use std.core.error;
+use std.core.string;
+use std.core.string.builder;
+use std.core.allocator.arena;
+
+const int KIND_BOOL   = 0;
+const int KIND_INT    = 1;
+const int KIND_REAL   = 2;
+const int KIND_STRING = 3;
+const int KIND_OBJECT = 4;
+const int KIND_ARRAY  = 5;
+
+rec JsonValue(
+    int           kind,
+    bool          as_bool,
+    int           as_int,
+    real          as_real,
+    String        as_string,
+    JsonElement[] as_object,
+    JsonValue[]   as_array
+);
+
+rec JsonElement(
+    String     key,
+    JsonValue* value
+);
+
+rec JsonParser(
+    String text,
+    int    cursor,
+    Arena* alloc
+);
+
+JsonValue* parse(Arena* alloc, String text) : Err {
+    JsonParser parser = new JsonParser(text, 0, alloc);
+
+    JsonValue* result = parse_any(&parser);
+    skip_whitespace(&parser);
+
+    if (parser.cursor < parser.text.len) {
+        err Err("Unexpected character");
+    }
+
+    ret result;
+}
+
+JsonValue* parse_any(JsonParser* parser) : Err {
+    char c = peek(parser);
+
+    switch (c) {
+    case '{': ret parse_object(parser);
+    case '"':
+        String value = parse_string(parser);
+
+        JsonValue* element = arena.alloc(parser.alloc, JsonValue.$size, JsonValue.$align);
+        element.kind       = KIND_STRING;
+        element.as_string  = value;
+
+        ret element;
+    case '[': ret parse_array(parser);
+    case 't': ret parse_boolean(parser);
+    case 'f': ret parse_boolean(parser);
+    default:
+        /*if (char.is_digit(c)) {
+            ret parse_number(parser);
+        }*/
+
+        StringBuilder builder = builder.create(parser.alloc);
+        builder.append(&builder, "Unexpected character: ");
+        builder.append(&builder, c);
+        err Err(builder.to_string(&builder));
+    }
+}
+
+JsonValue* parse_object(JsonParser* parser) : Err {
+    consume(parser, '{');
+
+    JsonElement* object   = arena.alloc(parser.alloc, JsonElement.$size, JsonElement.$align);
+    int          capacity = 1;
+    int          count    = 0;
+
+    bool first = true;
+    while (peek(parser) != '}') {
+        if (!first) {
+            consume(parser, ',');
+
+            if (peek(parser) == '}') {
+                StringBuilder builder = builder.create(parser.alloc);
+                builder.append(&builder, "Unexpected character: ");
+                builder.append(&builder, peek(parser));
+                err Err(builder.to_string(&builder));
+            }
+        }
+
+        first = false;
+        String key = parse_string(parser);
+
+        consume(parser, ':');
+        JsonValue* value = parse_any(parser);
+
+        if (count + 1 >= capacity) {
+            capacity = capacity * 2;
+            JsonElement* new_object = arena.alloc(parser.alloc, capacity * JsonElement.$size, JsonElement.$align);
+            mem.copy(new_object, object, count * JsonElement.$size);
+
+            object = new_object;
+        }
+
+        object[count++] = new JsonElement(key, value);
+    }
+
+    consume(parser, '}');
+
+    JsonValue* value = arena.alloc(parser.alloc, JsonValue.$size, JsonValue.$align);
+    value.kind      = KIND_OBJECT;
+    value.as_object = object[0:count];
+
+    ret value;
+}
+
+String parse_string(JsonParser* parser) : Err {
+    consume(parser, '"');
+
+    int start = parser.cursor;
+    // TODO: add escape support
+
+    while (parser.cursor < parser.text.len) {
+        char c = parser.text[parser.cursor];
+        switch (c) {
+        case '"':
+            String result = parser.text.ptr[start:parser.cursor] as String;
+            parser.cursor++;
+
+            ret string.copy(parser.alloc, result);
+        default:
+            if (c < 32) {
+                StringBuilder builder = builder.create(parser.alloc);
+                builder.append(&builder, "Unexpected character: ");
+                builder.append(&builder, c);
+                err Err(builder.to_string(&builder));
+            }
+
+            parser.cursor++;
+        }
+    }
+
+    err Err("uhhhhh");
+}
+
+JsonValue* parse_array(JsonParser* parser) : Err {
+    JsonValue* array    = arena.alloc(parser.alloc, JsonValue.$size, JsonValue.$align);
+    int        capacity = 1;
+    int        count    = 0;
+
+    consume(parser, '[');
+
+    bool first = true;
+    while (peek(parser) != ']')
+	{
+		if (!first)
+		{
+			consume(parser, ',');
+			if (peek(parser) == ']')
+			{
+				break;
+			}
+		}
+
+		first = false;
+		JsonValue* value = parse_any(parser);
+
+        if (count + 1 >= capacity) {
+            capacity = capacity * 2;
+            JsonValue* new_array = arena.alloc(parser.alloc, capacity * JsonValue.$size, JsonValue.$align);
+            mem.copy(new_array, array, count * JsonValue.$size);
+
+            array = new_array;
+        }
+
+        array[count++] = *value;
+	}
+
+    consume(parser, ']');
+
+    JsonValue* value = arena.alloc(parser.alloc, JsonValue.$size, JsonValue.$align);
+    value.kind     = KIND_ARRAY;
+    value.as_array = array[0:count];
+
+    ret value;
+}
+
+JsonValue* parse_boolean(JsonParser* parser) : Err {
+    String current = parser.text.ptr[parser.cursor:parser.text.len] as String;
+
+    bool flag = false;
+    if (string.starts_with(current, "true")) {
+        parser.cursor = parser.cursor + 4;
+        flag = true;
+    } else if (string.starts_with(current, "false")) {
+        parser.cursor = parser.cursor + 5;
+    } else {
+        StringBuilder builder = builder.create(parser.alloc);
+        builder.append(&builder, "Unexpected character: ");
+        builder.append(&builder, peek(parser));
+        err Err(builder.to_string(&builder));
+    }
+
+    JsonValue* value = arena.alloc(parser.alloc, JsonValue.$size, JsonValue.$align);
+    value.kind    = KIND_BOOL;
+    value.as_bool = flag;
+    
+    ret value;
+}
+
+JsonValue* parse_number(JsonParser* parser) { ret null; }
+
+void skip_whitespace(JsonParser* parser) {
+    while (parser.cursor < parser.text.len) {
+        char c = parser.text[parser.cursor];
+
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            parser.cursor++;
+            skip;
+        }
+
+        break;
+    }
+}
+
+char peek(JsonParser* parser) {
+    skip_whitespace(parser);
+    if (parser.cursor >= parser.text.len) {
+        ret '\0';
+    }
+
+    ret parser.text[parser.cursor];
+}
+
+void consume(JsonParser* parser, char c) : Err {
+    if (peek(parser) != c) {
+        StringBuilder builder = builder.create(parser.alloc);
+        builder.append(&builder, "Unexpected character: ");
+        builder.append(&builder, peek(parser));
+        err Err(builder.to_string(&builder));
+    }
+
+    parser.cursor++;
+}
+
+String to_string(Arena* alloc, JsonValue* json) {
+    StringBuilder builder = builder.create(alloc);
+    write_value(&builder, json);
+
+    ret builder.to_string(&builder);
+}
+
+void write_value(StringBuilder* builder, JsonValue* json) {
+    switch (json.kind) {
+    case KIND_BOOL:
+        builder.append(builder, json.as_bool);
+    case KIND_INT:
+        builder.append(builder, json.as_int);
+    case KIND_REAL:
+        builder.append(builder, json.as_real);
+    case KIND_STRING:
+        builder.append(builder, '"');
+        write_escaped_string(builder, json.as_string);
+        builder.append(builder, '"');
+    case KIND_OBJECT:
+        builder.append(builder, "{ ");
+
+        int i = 0;
+        while (i < json.as_object.len) {
+            if (i > 0) {
+                builder.append(builder, ", ");
+            }
+
+            JsonElement element = json.as_object[i];
+
+            builder.append(builder, '"');
+            write_escaped_string(builder, element.key);
+            builder.append(builder, '"');
+            builder.append(builder, ": ");
+            write_value(builder, element.value);
+
+            i = i + 1;
+        }
+
+        builder.append(builder, " }");
+    case KIND_ARRAY:
+        builder.append(builder, "[ ");
+
+        int i = 0;
+        while (i < json.as_array.len) {
+            if (i > 0) {
+                builder.append(builder, ", ");
+            }
+
+            write_value(builder, &json.as_array[i]);
+
+            i = i + 1;
+        }
+
+        builder.append(builder, " ]");
+    default:
+        break;
+    }
+}
+
+void write_escaped_string(StringBuilder* builder, String value) {
+    builder.append(builder, value);
+}
+
+JsonValue* get(Arena* alloc, JsonValue* json, String key) : Err {
+    if (json.kind != KIND_OBJECT) {
+        err Err("Value is not an object");
+    }
+
+    int i = 0;
+    while (i < json.as_object.len) {
+        JsonElement element = json.as_object[i];
+
+        if (element.key == key) {
+            ret element.value;
+        }
+
+        i = i + 1;
+    }
+
+    StringBuilder builder = builder.create(alloc);
+    builder.append(&builder, "Key not found: ");
+    builder.append(&builder, key);
+    err Err(builder.to_string(&builder));
+}

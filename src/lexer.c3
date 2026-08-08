@@ -283,8 +283,15 @@ fn void string(Lexer* lexer, CompileContext* context) => @pool() {
             consume(lexer, column: true);
 
             switch (lexer.current) {
-            case 'n': string.append("\n");
-            case 'e': string.append("\e");
+            case 'n':  string.append("\n");
+            case 't':  string.append("\t");
+            case 'r':  string.append("\r");
+            case '0':  string.append("\0");
+            case '\\': string.append("\\");
+            case '\'': string.append("'");
+            case '"':  string.append("\"");
+            case 'e':  string.append("\e");
+            default:   string.append(lexer.current);
             }
 
             consume(lexer, column: true);

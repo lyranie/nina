@@ -61,3 +61,15 @@ String from_bool(bool b) {
 
     ret "false";
 }
+
+bool starts_with(String s, String prefix) {
+    if (prefix.len > s.len) {
+        ret false;
+    }
+
+    if (prefix.len == 0) {
+        ret false;
+    }
+
+    ret s.ptr[0:prefix.len] as String == prefix;
+}

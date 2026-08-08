@@ -1,0 +1,15 @@
+mod std.core.error;
+
+/*
+ * Generic error; can later be extended by others
+ */
+rec Err(
+    String message
+);
+
+/*
+// Future me, make this work
+
+base Err {
+    void print(Err* err);
+}

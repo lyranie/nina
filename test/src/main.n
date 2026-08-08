@@ -1,19 +1,20 @@
 mod test.main;
 
 use std.io;
-use std.core.string.builder;
+use std.encoding.json;
 use std.core.allocator.arena;
 
 int main() {
     Arena alloc = arena.create(64 * 1024);
 
-    StringBuilder builder = builder.create(&alloc);
+    String json = "[{ \"string\": \"Penis\", \"bool\": true }]"; // \"int\": 420, \"real\": 69.42,
 
-    builder.append(&builder, "Test");
-    // builder.append(&builder, 5);
-    builder.append(&builder, true);
-
-    io.printn(builder.to_string(&builder));
+    try {
+        JsonValue* value = json.parse(&alloc, json);
+        io.printn(json.to_string(&alloc, value));
+    } catch (Err e) {
+        io.printn(e.message);
+    }
 
     arena.reset(&alloc);
     arena.free(&alloc);

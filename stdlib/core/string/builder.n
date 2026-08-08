@@ -4,6 +4,9 @@ use std.core.mem;
 use std.core.string;
 use std.core.allocator.arena;
 
+use std.io;
+use libc;
+
 rec StringBuilder(
     char*  data,
     int    len_data,
@@ -27,11 +30,17 @@ void append(StringBuilder* builder, any value) {
     switch (value.$typeid) {
     case String.$typeid: push(builder, value.$data as String);
     case bool.$typeid:   push(builder, string.from_bool(value.$data));
+    case char.$typeid:   push(builder, [value.$data as char] as String);
     }
 }
 
 void grow(StringBuilder* builder, int number) {
-    builder.capacity = builder.capacity + number;
+    int needed = builder.capacity + number;
+    int new_capacity = builder.capacity * 2;
+    if (new_capacity < needed) {
+        new_capacity = needed;
+    }
+    builder.capacity = new_capacity;
 
     char* new_data = arena.alloc(builder.alloc, builder.capacity * char.$size, char.$size);
     mem.copy(new_data, builder.data, builder.len_data);

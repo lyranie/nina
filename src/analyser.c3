@@ -392,7 +392,6 @@ fn void analyse_access(Analyser* analyser, CompileContext* context, Node* node) 
 
                 next = null;
             case NodeType.IDENT:
-                // constant
                 full_name.append(next.ident_node.name);
                 qualified_name = next.ident_node.name;
 
@@ -877,6 +876,10 @@ fn void analyse_cast(Analyser* analyser, CompileContext* context, Node* node) {
         valid = true;
     }
 
+    if (from.type_name == "any") {
+        valid = true;
+    }
+
     if (!valid) {
         highlighter::error(context, context.current_file, node.range.from, node.range.to, "Cannot cast type '%s' to type '%s'", from.type_name, to.type_name);
     }
@@ -889,7 +892,7 @@ fn void analyse_slice(Analyser* analyser, CompileContext* context, Node* node) {
 
     LookupElement target = lookup::get(context, node.slice_node.target, analyser.scope);
 
-    if (target.type_group != "pointer" && target.type_group != "array") {
+    if (target.type_group != "pointer" && target.type_group != "string" && target.type_group != "array") {
         highlighter::error(context, context.current_file, node.slice_node.target.range.from, node.slice_node.target.range.to, "Cannot slice type '%s'", target.type_name);
     }
 

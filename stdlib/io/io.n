@@ -59,7 +59,12 @@ void print(any a) {
             libc.printf(" }");
             break;
         case $$POINTER:
-            libc.printf("%p", a.$data);
+            void* ptr = a.$data as void*;
+            if (ptr) {
+                libc.printf("%p", ptr);
+            } else {
+                libc.printf("null");
+            }
             break;
         default:
             libc.printf("<UNKNOWN>");

@@ -96,6 +96,9 @@ fn NodeList get_type_fields(CompileContext* context, TypeInfo* type_info, Scope*
 fn TypeInfo* get_type_info(CompileContext* context, String name, Node* node = null) {
     if (name.ends_with("*")) {
         TypeInfo* base_info = get_type_info(context, name[:name.len - 1]);
+        if (!base_info) {
+            return null;
+        }
 
         TypeInfo* type_info = alloc::new(context.alloc, TypeInfo);
         type_info.name      = name;
@@ -107,6 +110,9 @@ fn TypeInfo* get_type_info(CompileContext* context, String name, Node* node = nu
 
     if (name.ends_with("[]")) {
         TypeInfo* base_info = get_type_info(context, name[:name.len - 2]);
+        if (!base_info) {
+            return null;
+        }
 
         TypeInfo* type_info = alloc::new(context.alloc, TypeInfo);
         type_info.name      = name;
@@ -147,6 +153,10 @@ fn TypeInfo* get_type_info(CompileContext* context, String name, Node* node = nu
                 break;
             }
         }
+    }
+
+    if (!type_info) {
+        return null;
     }
 
     if (node) {
@@ -447,7 +457,7 @@ fn LookupElement get(CompileContext* context, Node* node, Scope* scope, Generato
         } else {
             TypeInfo* type_info = get_type_info(context, name);
 
-            LookupElement base = { .llvm_type = type_info.llvm_type, .type_name = type_info.name };
+            LookupElement base = { .llvm_type = type_info.llvm_type, .type_name = type_info.name, .type_group = "struct" };
 
             Node* next = node.access_node.next;
 
@@ -895,6 +905,7 @@ fn FieldResult get_field(CompileContext* context, Scope* scope, LookupElement ba
     if (field_name.starts_with("$")) {
         switch (field_name) {
         case "$size":
+        case "$align":
         case "$typeid":
         case "$typekind":
             return { .lookup_element = { .type_name = "int", .type_group = "integer" } };
@@ -941,6 +952,10 @@ fn int get_type_size(CompileContext* context, Scope* scope, LookupElement elemen
     case "real":
         return 8;
     case "pointer":
+        if (llvm::get_type_kind(element.llvm_type) == LLVMTypeKind.STRUCT_TYPE_KIND) {
+            return 16;
+        }
+
         return 8;
     case "boolean":
         return 1;
@@ -949,13 +964,35 @@ fn int get_type_size(CompileContext* context, Scope* scope, LookupElement elemen
         NodeList  fields    = get_type_fields(context, type_info, scope);
 
         int size;
+        int max_align;
         foreach (Node* field : fields) {
             LookupElement field_element = get(context, field, scope);
-            size += get_type_size(context, scope, field_element);
+            int field_size  = get_type_size(context, scope, field_element);
+            int field_align = get_type_align(context, scope, field_element);
+
+            if (size % field_align != 0) {
+                size += field_align - (size % field_align);
+            }
+
+            size += field_size;
+
+            if (field_align > max_align) {
+                max_align = field_align;
+            }
+        }
+
+        if (max_align > 0 && size % max_align != 0) {
+            size += max_align - (size % max_align);
         }
 
         return size;
     case "array":
+        LLVMTypeKind kind = llvm::get_type_kind(element.llvm_type);
+        if (kind != LLVMTypeKind.ARRAY_TYPE_KIND) {
+            // slice type
+            return 16;
+        }
+
         long bracket_pos = element.type_name.rindex_of("[")!!;
         String element_type_name = element.type_name[:bracket_pos];
 
@@ -980,14 +1017,78 @@ fn int get_type_size(CompileContext* context, Scope* scope, LookupElement elemen
         NodeList  fields    = get_type_fields(context, type_info, scope);
 
         int size;
+        int max_align;
         foreach (Node* field : fields) {
             LookupElement field_element = get(context, field, scope);
-            size += get_type_size(context, scope, field_element);
+            int field_size  = get_type_size(context, scope, field_element);
+            int field_align = get_type_align(context, scope, field_element);
+
+            if (size % field_align != 0) {
+                size += field_align - (size % field_align);
+            }
+
+            size += field_size;
+
+            if (field_align > max_align) {
+                max_align = field_align;
+            }
+        }
+
+        if (max_align > 0 && size % max_align != 0) {
+            size += max_align - (size % max_align);
         }
 
         return size;
     default:
         highlighter::panic("cannot get size of type group '%s'", element.type_group);
+    }
+}
+
+fn int get_type_align(CompileContext* context, Scope* scope, LookupElement element) {
+    switch (element.type_group) {
+    case "integer": return 4;
+    case "real":    return 8;
+    case "pointer": return 8;
+    case "boolean": return 1;
+    case "string":  return 8;
+    case "struct":
+    case "":
+        TypeInfo* type_info = get_type_info(context, element.type_name);
+        NodeList  fields    = get_type_fields(context, type_info, scope);
+
+        int max_align = 1;
+        foreach (Node* field : fields) {
+            LookupElement field_element = get(context, field, scope);
+            int field_align = get_type_align(context, scope, field_element);
+            if (field_align > max_align) {
+                max_align = field_align;
+            }
+        }
+
+        return max_align;
+    case "array":
+        LLVMTypeKind kind = llvm::get_type_kind(element.llvm_type);
+        if (kind != LLVMTypeKind.ARRAY_TYPE_KIND) {
+            // slice type
+            return 8;
+        }
+
+        long bracket_pos = element.type_name.rindex_of("[")!!;
+        String element_type_name = element.type_name[:bracket_pos];
+        TypeInfo* element_type_info = get_type_info(context, element_type_name);
+
+        LLVMTypeKind element_kind = llvm::get_type_kind(element_type_info.llvm_type);
+        String element_type_group = element_kind == LLVMTypeKind.INTEGER_TYPE_KIND
+            ? (llvm::get_int_type_width(element_type_info.llvm_type) == 1 ? "boolean" : "integer")
+            : element_kind == LLVMTypeKind.POINTER_TYPE_KIND
+                ? "pointer"
+                : "struct";
+
+        LookupElement element_data = { .llvm_type = element_type_info.llvm_type, .type_name = element_type_name, .type_group = element_type_group };
+
+        return get_type_align(context, scope, element_data);
+    default:
+        highlighter::panic("cannot get align of type group '%s'", element.type_group);
     }
 }
 
